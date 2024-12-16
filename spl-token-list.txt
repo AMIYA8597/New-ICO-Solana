@@ -1,0 +1,94 @@
+webskitters@webskitters-H410M-S2-V2:~/Desktop/work/solana$ spl-token accounts --owner DYkCAokwibanNxMvixmoZFQDwayGDJWfJ9moZjDRpUvW --url https://api.devnet.solana.com
+Token                                         Balance
+-----------------------------------------------------
+
+webskitters@webskitters-H410M-S2-V2:~/Desktop/work/solana$ spl-token accounts --owner DYkCAokwibanNxMvixmoZFQDwayGDJWfJ9moZjDRpUvW --url https://api.devnet.solana.com
+Token                                         Balance
+-----------------------------------------------------
+
+webskitters@webskitters-H410M-S2-V2:~/Desktop/work/solana$ spl-token create-token
+Creating token EYt84zgX6cAuh43Xz5gRn4Z1eaiW5GGkdR3sWRAd8fT1 under program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+
+Address:  EYt84zgX6cAuh43Xz5gRn4Z1eaiW5GGkdR3sWRAd8fT1
+Decimals:  9
+
+Signature: 5gGTKibafmpsVR6y1q1rcthTvhDAkws95PCN8ShHhBqohJnzwBtZ2FfkXLFj8QTK6g6JKFXyz4sgQqHU6woLJthp
+
+webskitters@webskitters-H410M-S2-V2:~/Desktop/work/solana$ spl-token create-account EYt84zgX6cAuh43Xz5gRn4Z1eaiW5GGkdR3sWRAd8fT1
+Creating account AhmbnmLBQWNy3zQMwi6g7s5tGFmbKZEfUczNkevZWFtX
+
+Signature: L5nKDLc8a3aWYXc1SkZu9FArAEzGt9mmBw25BMwbHtUyDhWx5jkr7o9S3DkF5yGdDe2hZWcDJrVwWXtBhw6CxxF
+
+webskitters@webskitters-H410M-S2-V2:~/Desktop/work/solana$ spl-token mint EYt84zgX6cAuh43Xz5gRn4Z1eaiW5GGkdR3sWRAd8fT1 1000000 AhmbnmLBQWNy3zQMwi6g7s5tGFmbKZEfUczNkevZWFtX
+Minting 1000000 tokens
+  Token: EYt84zgX6cAuh43Xz5gRn4Z1eaiW5GGkdR3sWRAd8fT1
+  Recipient: AhmbnmLBQWNy3zQMwi6g7s5tGFmbKZEfUczNkevZWFtX
+
+Signature: gXGW3hLsDDjKsp6hFgjyW42rfCc4s11bNHTBYnD92LhjJcaD72VoJydmCysGLZ8h6MWfF13xMU6jcYLKjHr9aGk
+
+webskitters@webskitters-H410M-S2-V2:~/Desktop/work/solana$ spl-token supply EYt84zgX6cAuh43Xz5gRn4Z1eaiW5GGkdR3sWRAd8fT1
+1000000
+
+webskitters@webskitters-H410M-S2-V2:~/Desktop/work/solana$ spl-token accounts
+Token                                         Balance
+-----------------------------------------------------
+EYt84zgX6cAuh43Xz5gRn4Z1eaiW5GGkdR3sWRAd8fT1  1000000
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+webskitters@webskitters-H410M-S2-V2:~/Desktop/work/solana$ spl-token accounts --owner FoScPhAv3DcAwdxNbo4U47cJRhihL3mUSQKfZu3f6SJM
+Token                                         Balance
+-----------------------------------------------------
+73Vd3spmsgAdPWR5fDxGazKk21QmRPnSvHBeG99pS4CS  0
+BrwJssqTxMgYcFgJWiwTSPRpwzPkfaKveDtkkL6Vr9qr  0
+ES2ZjJnXi9GArArwFWmrJC5LSA3MsCf4G4FHjGJNfEgr  0
+H3HH5xzfih5UkzXVzUQ55cKPnrPMpC2TmTcQMyjHv7Nn  0
+
+webskitters@webskitters-H410M-S2-V2:~/Desktop/work/solana$ spl-token create-token
+Creating token 7GYz5XMx5BQrMtexJZrrJQM1WfhHnWAmf8Snhaqqmf3U under program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+
+Address:  7GYz5XMx5BQrMtexJZrrJQM1WfhHnWAmf8Snhaqqmf3U
+Decimals:  9
+
+Signature: h6yaG9MvEyzBNkNExdy48ZuMKLRWBH5zgMbrLF5QM2q1FkgpzngzAxeMZGRTrnYRZ8xwSW2NttCKo9RyUjY8LBB
+
+webskitters@webskitters-H410M-S2-V2:~/Desktop/work/solana$ spl-token create-account 7GYz5XMx5BQrMtexJZrrJQM1WfhHnWAmf8Snhaqqmf3U
+Creating account 3i4U9ZYBJkP8knkL9qPCP95xnQ3BsqPYYDQjZtWWL2A5
+
+Signature: 4Y1xM6T8jwVB6Dv9be4cq9DXoA9Kh4NcWJtKtzYAk5R7czkdRbcjAeYU22pgTpHwsv2L1qZ4ubiuP5qkNPr45j45
+
+
+webskitters@webskitters-H410M-S2-V2:~/Desktop/work/solana$ spl-token mint 7GYz5XMx5BQrMtexJZrrJQM1WfhHnWAmf8Snhaqqmf3U 1000000 3i4U9ZYBJkP8knkL9qPCP95xnQ3BsqPYYDQjZtWWL2A5
+Minting 1000000 tokens
+  Token: 7GYz5XMx5BQrMtexJZrrJQM1WfhHnWAmf8Snhaqqmf3U
+  Recipient: 3i4U9ZYBJkP8knkL9qPCP95xnQ3BsqPYYDQjZtWWL2A5
+
+Signature: 5MPD5pm5Kvcchu6Gq9RfkstSwv9ARazWqAptsz4yyMdJ9HERSw1xbLcXfNtBmkHTg3Uxr6DTxZDF8jVdrCcjEUBh
+
+webskitters@webskitters-H410M-S2-V2:~/Desktop/work/solana$ spl-token supply 7GYz5XMx5BQrMtexJZrrJQM1WfhHnWAmf8Snhaqqmf3U
+1000000
