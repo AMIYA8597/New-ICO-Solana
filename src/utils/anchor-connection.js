@@ -21,6 +21,23 @@ export const getProgram = (connection, wallet) => {
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 // import { Connection, PublicKey } from '@solana/web3.js';
 // import { Program, AnchorProvider } from '@project-serum/anchor';
 // import idl from './ico-idl.json';
