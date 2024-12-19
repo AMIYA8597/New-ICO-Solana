@@ -21,28 +21,27 @@ const Sidebar = () => {
   ];
 
   return (
-    <div className="hidden md:flex md:flex-col md:w-64 md:fixed md:inset-y-0 bg-white border-r">
-      <div className="flex flex-col flex-1 min-h-0 overflow-y-auto">
-        <nav className="flex-1 px-2 py-4 space-y-1">
+    <div className="bg-white w-64 min-h-screen shadow-md">
+      <div className="py-4 px-3">
+        <nav className="mt-5 space-y-2">
           {navigation.map((item) => (
             <Link
               key={item.name}
               to={item.href}
               className={`${
                 location.pathname === item.href
-                  ? 'bg-gray-100 text-gray-900'
-                  : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-              } group flex items-center px-2 py-2 text-sm font-medium rounded-md`}
+                  ? 'bg-purple-100 text-purple-900'
+                  : 'text-gray-600 hover:bg-purple-50 hover:text-purple-900'
+              } group flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors duration-150 ease-in-out`}
             >
               <svg
                 className={`${
-                  location.pathname === item.href ? 'text-gray-500' : 'text-gray-400 group-hover:text-gray-500'
-                } mr-3 flex-shrink-0 h-6 w-6`}
+                  location.pathname === item.href ? 'text-purple-500' : 'text-gray-400 group-hover:text-purple-500'
+                } mr-3 flex-shrink-0 h-6 w-6 transition-colors duration-150 ease-in-out`}
                 xmlns="http://www.w3.org/2000/svg"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
-                aria-hidden="true"
               >
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={item.icon} />
               </svg>
@@ -52,7 +51,7 @@ const Sidebar = () => {
 
           {isAdminWallet(publicKey) && (
             <>
-              <div className="mt-8 mb-2 px-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+              <div className="mt-8 mb-2 px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
                 ADMIN
               </div>
               {adminNavigation.map((item) => (
@@ -61,19 +60,18 @@ const Sidebar = () => {
                   to={item.href}
                   className={`${
                     location.pathname === item.href
-                      ? 'bg-gray-100 text-gray-900'
-                      : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                  } group flex items-center px-2 py-2 text-sm font-medium rounded-md`}
+                      ? 'bg-purple-100 text-purple-900'
+                      : 'text-gray-600 hover:bg-purple-50 hover:text-purple-900'
+                  } group flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors duration-150 ease-in-out`}
                 >
                   <svg
                     className={`${
-                      location.pathname === item.href ? 'text-gray-500' : 'text-gray-400 group-hover:text-gray-500'
-                    } mr-3 flex-shrink-0 h-6 w-6`}
+                      location.pathname === item.href ? 'text-purple-500' : 'text-gray-400 group-hover:text-purple-500'
+                    } mr-3 flex-shrink-0 h-6 w-6 transition-colors duration-150 ease-in-out`}
                     xmlns="http://www.w3.org/2000/svg"
                     fill="none"
                     viewBox="0 0 24 24"
                     stroke="currentColor"
-                    aria-hidden="true"
                   >
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={item.icon} />
                   </svg>

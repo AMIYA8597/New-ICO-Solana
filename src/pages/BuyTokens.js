@@ -5,9 +5,6 @@ import { getProgram } from '../utils/anchor-connection';
 import * as anchor from '@project-serum/anchor';
 import { TOKEN_PROGRAM_ID, getAssociatedTokenAddress } from '@solana/spl-token';
 
-import { Buffer } from "buffer/"; 
-window.Buffer = Buffer;
-
 const BuyTokens = () => {
   const { connection } = useConnection();
   const wallet = useWallet();
@@ -89,11 +86,11 @@ const BuyTokens = () => {
 
   return (
     <div className="max-w-lg mx-auto">
-      <div className="bg-white p-6 rounded-lg shadow">
+      <div className="card">
         <h2 className="text-2xl font-semibold mb-6">Buy Tokens</h2>
         <form onSubmit={handleBuyTokens} className="space-y-4">
           <div>
-            <label htmlFor="amount" className="block text-sm font-medium text-gray-700">
+            <label htmlFor="amount" className="label">
               Amount of tokens to buy:
             </label>
             <input
@@ -101,14 +98,14 @@ const BuyTokens = () => {
               id="amount"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
-              className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+              className="input"
               required
             />
           </div>
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-black hover:bg-gray-800 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
+            className="btn btn-primary w-full"
           >
             {loading ? 'Buying...' : 'Buy Tokens'}
           </button>
@@ -129,6 +126,8 @@ const BuyTokens = () => {
 };
 
 export default BuyTokens;
+
+
 
 
 

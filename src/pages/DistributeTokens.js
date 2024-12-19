@@ -3,8 +3,6 @@ import { useConnection, useWallet } from '@solana/wallet-adapter-react';
 import { PublicKey } from '@solana/web3.js';
 import { getProgram } from '../utils/anchor-connection';
 import { TOKEN_PROGRAM_ID, getAssociatedTokenAddress } from '@solana/spl-token';
-// import { Card } from '@/components/ui/Card';
-// import { Button } from '@/components/ui/Button';
 
 import { Buffer } from "buffer/"; 
 window.Buffer = Buffer;

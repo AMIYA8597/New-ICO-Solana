@@ -2,8 +2,6 @@ import React, { useState } from 'react';
 import { useConnection, useWallet } from '@solana/wallet-adapter-react';
 import { PublicKey } from '@solana/web3.js';
 import { getProgram } from '../utils/anchor-connection';
-// import { Card } from '@/components/ui/card';
-// import { Button } from '@/components/ui/button';
 
 import { Buffer } from "buffer/"; 
 window.Buffer = Buffer;
