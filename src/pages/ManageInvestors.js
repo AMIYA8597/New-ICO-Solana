@@ -110,13 +110,13 @@ const ManageInvestors = () => {
                 value={newInvestor}
                 onChange={(e) => setNewInvestor(e.target.value)}
                 placeholder="Enter Solana address"
-                className="flex-grow px-3 py-2 placeholder-gray-400 border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-600 focus:border-transparent"
+                className="flex-grow px-3 py-2 placeholder-gray-400 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
                 required
               />
               <button
                 type="submit"
                 disabled={loading}
-                className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline transition duration-150 ease-in-out"
+                className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline transition duration-150 ease-in-out"
               >
                 {loading ? 'Adding...' : 'Add Investor'}
               </button>

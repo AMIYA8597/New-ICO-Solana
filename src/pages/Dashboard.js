@@ -75,12 +75,12 @@ const Dashboard = () => {
     <div className="space-y-6">
       <h1 className="text-3xl font-bold mb-6">ICO Dashboard</h1>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="card bg-gradient-to-br from-purple-500 to-purple-600 text-white">
+        <div className="card bg-gradient-to-br from-sky-700 to-sky-800 text-white">
           <h2 className="text-xl font-semibold mb-2">Total Supply</h2>
           <p className="text-3xl font-bold">{formatLamports(icoData.totalSupply)}</p>
           <p className="mt-2 text-sm">Round Type: {Object.keys(icoData.roundType)[0]}</p>
         </div>
-        <div className="card bg-gradient-to-br from-green-500 to-green-600 text-white">
+        <div className="card bg-gradient-to-br from-slate-500 to-slate-600 text-white">
           <h2 className="text-xl font-semibold mb-2">Tokens Sold</h2>
           <p className="text-3xl font-bold">{formatLamports(icoData.tokensSold)}</p>
           <p className="mt-2 text-sm">
@@ -94,20 +94,20 @@ const Dashboard = () => {
         <div className="relative pt-1">
           <div className="flex mb-2 items-center justify-between">
             <div>
-              <span className="text-xs font-semibold inline-block py-1 px-2 uppercase rounded-full text-purple-600 bg-purple-200">
+              <span className="text-xs font-semibold inline-block py-1 px-2 uppercase rounded-full text-sky-600 bg-sky-200">
                 {((Number(icoData.tokensSold) / Number(icoData.totalSupply)) * 100).toFixed(2)}%
               </span>
             </div>
             <div className="text-right">
-              <span className="text-xs font-semibold inline-block text-purple-600">
+              <span className="text-xs font-semibold inline-block text-sky-600">
                 {formatLamports(icoData.tokensSold)} / {formatLamports(icoData.totalSupply)}
               </span>
             </div>
           </div>
-          <div className="overflow-hidden h-2 mb-4 text-xs flex rounded bg-purple-200">
+          <div className="overflow-hidden h-2 mb-4 text-xs flex rounded bg-sky-200">
             <div
               style={{ width: `${(Number(icoData.tokensSold) / Number(icoData.totalSupply)) * 100}%` }}
-              className="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-purple-500"
+              className="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-sky-500"
             ></div>
           </div>
         </div>

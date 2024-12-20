@@ -81,9 +81,9 @@ const TokenBalance = () => {
         <div className="px-6 py-4">
           <h2 className="text-2xl font-bold text-gray-800 mb-4">Your Token Balance</h2>
           <div className="space-y-4">
-            <div className="bg-purple-100 rounded-lg p-4">
-              <p className="text-sm font-medium text-purple-600">Current Balance:</p>
-              <p className="text-3xl font-bold text-purple-800">{formatLamports(balance)} tokens</p>
+            <div className="bg-indigo-100 rounded-lg p-4">
+              <p className="text-sm font-medium text-indigo-600">Current Balance:</p>
+              <p className="text-3xl font-bold text-indigo-800">{formatLamports(balance)} tokens</p>
             </div>
             <div className="bg-green-100 rounded-lg p-4">
               <p className="text-sm font-medium text-green-600">Total Purchased:</p>
@@ -94,7 +94,7 @@ const TokenBalance = () => {
         <div className="px-6 py-4 bg-gray-50">
           <button
             onClick={fetchTokenBalance}
-            className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline transition duration-150 ease-in-out"
+            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline transition duration-150 ease-in-out"
           >
             Refresh Balance
           </button>

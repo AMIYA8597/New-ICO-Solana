@@ -30,13 +30,13 @@ const Sidebar = () => {
               to={item.href}
               className={`${
                 location.pathname === item.href
-                  ? 'bg-purple-100 text-purple-900'
-                  : 'text-gray-600 hover:bg-purple-50 hover:text-purple-900'
+                  ? 'bg-slate-100 text-slate-900'
+                  : 'text-gray-600 hover:bg-slate-50 hover:text-slate-900'
               } group flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors duration-150 ease-in-out`}
             >
               <svg
                 className={`${
-                  location.pathname === item.href ? 'text-purple-500' : 'text-gray-400 group-hover:text-purple-500'
+                  location.pathname === item.href ? 'text-slate-500' : 'text-gray-400 group-hover:text-slate-500'
                 } mr-3 flex-shrink-0 h-6 w-6 transition-colors duration-150 ease-in-out`}
                 xmlns="http://www.w3.org/2000/svg"
                 fill="none"
@@ -60,13 +60,13 @@ const Sidebar = () => {
                   to={item.href}
                   className={`${
                     location.pathname === item.href
-                      ? 'bg-purple-100 text-purple-900'
-                      : 'text-gray-600 hover:bg-purple-50 hover:text-purple-900'
+                      ? 'bg-slate-100 text-slate-900'
+                      : 'text-gray-600 hover:bg-slate-50 hover:text-slate-900'
                   } group flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors duration-150 ease-in-out`}
                 >
                   <svg
                     className={`${
-                      location.pathname === item.href ? 'text-purple-500' : 'text-gray-400 group-hover:text-purple-500'
+                      location.pathname === item.href ? 'text-slate-500' : 'text-gray-400 group-hover:text-slate-500'
                     } mr-3 flex-shrink-0 h-6 w-6 transition-colors duration-150 ease-in-out`}
                     xmlns="http://www.w3.org/2000/svg"
                     fill="none"
