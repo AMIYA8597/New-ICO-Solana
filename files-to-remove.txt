@@ -1,4 +1,0 @@
-test-ledger/rocksdb/000037.sst
-test-ledger/rocksdb/000033.sst
-test-ledger/rocksdb/000035.sst
-test-ledger/rocksdb/000039.sst
