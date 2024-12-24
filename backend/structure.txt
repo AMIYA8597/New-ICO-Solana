@@ -1,0 +1,20 @@
+backend/
+├── config/
+│   └── db.js
+├── controllers/
+│   ├── icoController.js
+│   └── userController.js
+├── middleware/
+│   └── authMiddleware.js
+├── models/
+│   ├── icoModel.js
+│   └── userModel.js
+├── routes/
+│   ├── icoRoutes.js
+│   └── userRoutes.js
+├── utils/
+│   ├── solanaUtils.js
+│   └── jwtUtils.js
+├── .env
+├── package.json
+└── server.js

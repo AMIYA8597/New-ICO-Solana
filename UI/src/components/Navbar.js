@@ -28,7 +28,7 @@ const Navbar = () => {
           <div className="flex items-center space-x-4">
             <Link to="/buy" className="hover:text-gray-200">Buy Tokens</Link>
             <Link to="/balance" className="hover:text-gray-200">Token Balance</Link>
-            <WalletMultiButton className="  bg-sky-700 hover:!bg-sky-800" />
+            <WalletMultiButton className="!bg-sky-700 hover:!bg-sky-800" />
           </div>
         </div>
       </div>
