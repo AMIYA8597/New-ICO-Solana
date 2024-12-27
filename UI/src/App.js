@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { BrowserRouter as Router, Route, Routes, Navigate } from 'react-router-dom';
-import { ConnectionProvider, useWallet, WalletProvider } from '@solana/wallet-adapter-react';
+import { ConnectionProvider, WalletProvider } from '@solana/wallet-adapter-react';
 import { WalletAdapterNetwork } from '@solana/wallet-adapter-base';
 import { PhantomWalletAdapter } from '@solana/wallet-adapter-wallets';
 import { WalletModalProvider } from '@solana/wallet-adapter-react-ui';
@@ -13,14 +13,9 @@ import ManageInvestors from './pages/ManageInvestors';
 import UpdateIcoParameters from './pages/UpdateIcoParameters';
 import DistributeTokens from './pages/DistributeTokens';
 import EndIco from './pages/EndIco';
-import { isAdminWallet } from './utils/admin-check';
+import { AdminRoute } from './components/AdminRoute';
 import '@solana/wallet-adapter-react-ui/styles.css';
 import './App.css';
-
-const AdminRoute = ({ children }) => {
-  const { publicKey } = useWallet();
-  return isAdminWallet(publicKey) ? children : <Navigate to="/" />;
-};
 
 function App() {
   const network = WalletAdapterNetwork.Devnet;
@@ -51,3 +46,4 @@ function App() {
 }
 
 export default App;
+

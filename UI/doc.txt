@@ -1,0 +1,15 @@
+[Frontend: Deposit Page] --> [User click to the token ,then pop up goes and want user wallet Address then store it to the backend database basis of the userNAme,
+    
+        then give Admin wallet Address (Token Pool Wallwt address), then track the transaction and base of the from address(user Address) when transaction complete,
+        then one more internal transaction happen Admi token pool to Fee pool wallet Address(1.49% from total users amount),
+        and after that time Show a success message to the UI and store the demo balance base of the username with token Image] 
+
+        --> [Backend Listener] --> [Database Update]
+            --> [Frontend Update: Success Notification]
+                --> [Game Currency Credited]
+
+[Frontend: Withdrawal Page] --> [User Action: Enter Amount, Address, Confirm]
+    --> [Backend Validation] --> [goes to the backend and wait for the admin confirmation]
+        --> [Event: Withdraw, first transaction goes frpm Token Pool to fee pool as of  internal transaction (1.49% of entire amount)then remaining transaction happen Token Pool to user wallet Address after Admin verify]
+            --> [Backend Listener] --> [Database Update]
+                --> [Frontend Update: Success Notification]

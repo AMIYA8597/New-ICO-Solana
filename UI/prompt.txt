@@ -1,16 +1,16 @@
 use anchor_lang::prelude::*;
+use anchor_spl::associated_token::AssociatedToken;
 use anchor_spl::{
-    associated_token::AssociatedToken,
-    token::{self, Mint, TokenAccount, Transfer},
+    associated_token::get_associated_token_address,
+    token::{self, Mint, TokenAccount},
 };
-
-declare_id!("56TcuGYiK1kU1iTr1XLCYV6a4PYT8o4rqzmqvQHdEFNE");
-
+ 
+declare_id!("GmLfd5j41fTbgL9G3C58Q4xUHbwmyXKfEE22dJg9s9QY");
+ 
 #[program]
 pub mod advanced_ico_program {
     use super::*;
-
-    // Initialize the ICO
+ 
     pub fn initialize(
         ctx: Context<Initialize>,
         total_supply: u64,
@@ -30,11 +30,39 @@ pub mod advanced_ico_program {
         ico.is_active = true;
         ico.round_type = round_type;
         ico.seed_investors = Vec::new();
-
+        ico.total_investors = 0;
+        ico.purchase_counter = 0;
+ 
         Ok(())
     }
-
-    // Update ICO parameters
+ 
+    pub fn add_seed_investor(ctx: Context<AddSeedInvestor>, investor: Pubkey) -> Result<()> {
+        let ico = &mut ctx.accounts.ico_account;
+        require!(
+            ctx.accounts.authority.key() == ico.authority,
+            IcoError::Unauthorized
+        );
+        require!(
+            !ico.seed_investors.contains(&investor),
+            IcoError::InvestorAlreadyExists
+        );
+ 
+        ico.seed_investors.push(investor);
+        Ok(())
+    }
+ 
+    pub fn remove_seed_investor(ctx: Context<RemoveSeedInvestor>, investor: Pubkey) -> Result<()> {
+        let ico = &mut ctx.accounts.ico_account;
+        require!(
+            ctx.accounts.authority.key() == ico.authority,
+            IcoError::Unauthorized
+        );
+        if let Some(index) = ico.seed_investors.iter().position(|&x| x == investor) {
+            ico.seed_investors.remove(index);
+        }
+        Ok(())
+    }
+ 
     pub fn update_ico_parameters(
         ctx: Context<UpdateIcoParameters>,
         total_supply: Option<u64>,
@@ -44,93 +72,57 @@ pub mod advanced_ico_program {
         round_type: Option<RoundType>,
     ) -> Result<()> {
         let ico = &mut ctx.accounts.ico_account;
-
         require!(
             ctx.accounts.authority.key() == ico.authority,
             IcoError::Unauthorized
         );
-
+ 
         if let Some(supply) = total_supply {
             ico.total_supply = supply;
         }
-
         if let Some(price) = token_price {
             ico.token_price = price;
         }
-
         if let Some(start) = start_time {
             ico.start_time = start;
         }
-
         if let Some(dur) = duration {
             ico.duration = dur;
         }
-
         if let Some(round) = round_type {
             ico.round_type = round;
         }
-
         Ok(())
     }
-
-    // Add a seed investor to the whitelist
-    pub fn add_seed_investor(ctx: Context<AddSeedInvestor>, investor: Pubkey) -> Result<()> {
-        let ico = &mut ctx.accounts.ico_account;
-
-        require!(
-            ctx.accounts.authority.key() == ico.authority,
-            IcoError::Unauthorized
-        );
-
-        ico.seed_investors.push(investor);
-
-        Ok(())
-    }
-
-    // Remove a seed investor from the whitelist
-    pub fn remove_seed_investor(ctx: Context<RemoveSeedInvestor>, investor: Pubkey) -> Result<()> {
-        let ico = &mut ctx.accounts.ico_account;
-
-        require!(
-            ctx.accounts.authority.key() == ico.authority,
-            IcoError::Unauthorized
-        );
-
-        if let Some(index) = ico.seed_investors.iter().position(|&x| x == investor) {
-            ico.seed_investors.remove(index);
-        }
-
-        Ok(())
-    }
-
-    // Buy tokens during the ICO
+ 
     pub fn buy_tokens(ctx: Context<BuyTokens>, amount: u64) -> Result<()> {
         let current_time = Clock::get()?.unix_timestamp;
         let ico = &mut ctx.accounts.ico_account;
-
+ 
         require!(
             ico.is_active
                 && current_time >= ico.start_time
                 && current_time < ico.start_time + ico.duration,
             IcoError::IcoNotActive
         );
-
+ 
         if ico.round_type == RoundType::SeedRound {
             require!(
                 ico.seed_investors.contains(&ctx.accounts.buyer.key()),
                 IcoError::NotWhitelisted
             );
         }
-
+ 
         require!(
             ico.tokens_sold + amount <= ico.total_supply,
             IcoError::InsufficientTokens
         );
-
+ 
         let total_cost = amount
             .checked_mul(ico.token_price)
             .ok_or(IcoError::MathOverflow)?;
-
+ 
+        // Transfer payment
         let transfer_context = CpiContext::new(
             ctx.accounts.system_program.to_account_info(),
             anchor_lang::system_program::Transfer {
@@ -139,265 +131,274 @@ pub mod advanced_ico_program {
             },
         );
         anchor_lang::system_program::transfer(transfer_context, total_cost)?;
-
+ 
+        // Initialize purchase account
         let purchase = &mut ctx.accounts.purchase_account;
         purchase.buyer = ctx.accounts.buyer.key();
-        purchase.amount = purchase
-            .amount
-            .checked_add(amount)
-            .ok_or(IcoError::MathOverflow)?;
+        purchase.amount = amount;
         purchase.is_distributed = false;
-
+        purchase.timestamp = current_time;
+        purchase.ico = ico.key();
+        ico.purchase_counter = ico
+            .purchase_counter
+            .checked_add(1)
+            .ok_or(IcoError::MathOverflow)?;
+ 
+        // Update ICO stats
         ico.tokens_sold = ico
             .tokens_sold
             .checked_add(amount)
             .ok_or(IcoError::MathOverflow)?;
-
+ 
+        ico.total_investors = ico
+            .total_investors
+            .checked_add(1)
+            .ok_or(IcoError::MathOverflow)?;
+ 
         emit!(TokenPurchaseEvent {
             buyer: ctx.accounts.buyer.key(),
             amount,
             price: ico.token_price,
-            round_type: ico.round_type.clone(),
+            timestamp: current_time,
         });
-
+ 
         Ok(())
     }
-
-    // Distribute tokens to buyers
+ 
     pub fn distribute_tokens(ctx: Context<DistributeTokens>) -> Result<()> {
-        let ico = &mut ctx.accounts.ico_account;
-
-        require!(!ico.is_active, IcoError::IcoStillActive);
-        require!(ico.tokens_sold > 0, IcoError::InsufficientTokens);
-
-        require!(
-            ctx.accounts.authority.key() == ico.authority,
-            IcoError::Unauthorized
-        );
-
-        let transfer_context = CpiContext::new(
+        let ico = &ctx.accounts.ico_account;
+        let purchase = &mut ctx.accounts.purchase_account;
+ 
+        require!(!purchase.is_distributed, IcoError::AlreadyDistributed);
+        // require!(!ico.is_active, IcoError::IcoStillActive);
+ 
+        // Transfer tokens
+        let transfer_ctx = CpiContext::new(
             ctx.accounts.token_program.to_account_info(),
-            Transfer {
+            token::Transfer {
                 from: ctx.accounts.treasury_token_account.to_account_info(),
                 to: ctx.accounts.buyer_token_account.to_account_info(),
                 authority: ctx.accounts.authority.to_account_info(),
             },
         );
-
-        token::transfer(transfer_context, ctx.accounts.purchase_account.amount)?;
-
-        let purchase = &mut ctx.accounts.purchase_account;
+ 
+        token::transfer(transfer_ctx, purchase.amount)?;
+ 
+        // Mark as distributed
         purchase.is_distributed = true;
-
+ 
         emit!(PurchaseEvent {
             buyer: purchase.buyer,
             amount: purchase.amount,
             is_distributed: true,
-        });
-
+        });/*  */
+ 
         Ok(())
     }
-
-    // End the ICO
+ 
     pub fn end_ico(ctx: Context<EndIco>) -> Result<()> {
         let ico = &mut ctx.accounts.ico_account;
         let current_time = Clock::get()?.unix_timestamp;
-
         require!(
             current_time >= ico.start_time + ico.duration,
             IcoError::IcoStillActive
         );
-
         ico.is_active = false;
         Ok(())
     }
-
-    // Get seed investors (utility function)
+ 
     pub fn get_seed_investors(ctx: Context<GetSeedInvestors>) -> Result<()> {
         let ico = &ctx.accounts.ico_account;
         msg!("Number of seed investors: {}", ico.seed_investors.len());
         for (index, investor) in ico.seed_investors.iter().enumerate() {
             msg!("Seed Investor {}: {}", index + 1, investor);
         }
-
         Ok(())
     }
 }
-// Fundraising Round Types
+ 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, PartialEq)]
 pub enum RoundType {
     SeedRound,
     PreICO,
     PublicICO,
 }
-
+ 
 impl Default for RoundType {
     fn default() -> Self {
         RoundType::SeedRound
     }
 }
-
-// Events
+ 
 #[event]
 pub struct TokenPurchaseEvent {
     pub buyer: Pubkey,
     pub amount: u64,
     pub price: u64,
-    pub round_type: RoundType,
+    pub timestamp: i64,
 }
-
+ 
 #[event]
 pub struct PurchaseEvent {
     pub buyer: Pubkey,
     pub amount: u64,
     pub is_distributed: bool,
 }
-
-// Purchase Account
-#[account]
-#[derive(Default)]
-pub struct PurchaseAccount {
-    pub buyer: Pubkey,
-    pub amount: u64,
-    pub is_distributed: bool,
-}
-
-// ICO Account
+ 
 #[account]
 #[derive(Default)]
 pub struct IcoAccount {
-    pub authority: Pubkey,
-    pub token_mint: Pubkey,
-    pub total_supply: u64,
-    pub token_price: u64,
-    pub tokens_sold: u64,
-    pub start_time: i64,
-    pub duration: i64,
-    pub is_active: bool,
-    pub round_type: RoundType,
-    pub seed_investors: Vec<Pubkey>,
+    pub authority: Pubkey,           // 32
+    pub token_mint: Pubkey,          // 32
+    pub total_supply: u64,           // 8
+    pub token_price: u64,            // 8
+    pub tokens_sold: u64,            // 8
+    pub start_time: i64,             // 8
+    pub duration: i64,               // 8
+    pub is_active: bool,             // 1
+    pub round_type: RoundType,       // 1
+    pub seed_investors: Vec<Pubkey>, // 4 + (32 * n)
+    pub total_investors: u64,        // 8
+    pub purchase_counter: u64,
 }
-
-// Account Structs
+ 
+#[account]
+pub struct PurchaseAccount {
+    pub buyer: Pubkey,        // 32
+    pub amount: u64,          // 8
+    pub is_distributed: bool, // 1
+    pub timestamp: i64,       // 8
+    pub ico: Pubkey,          // 32 (reference to parent ICO)
+}
+ 
 #[derive(Accounts)]
 pub struct Initialize<'info> {
     #[account(mut)]
     pub authority: Signer<'info>,
+ 
     #[account(
-        init, 
-        payer = authority, 
-        space = 8 + 32 + 2 + 8 + 6 + 1 + 1 + 4 + (32 * 100),
+        init,
+        payer = authority,
+        space = 8 +    // discriminator
+            32 +       // authority
+            32 +       // token_mint
+            8 +        // total_supply
+            8 +        // token_price
+            8 +        // tokens_sold
+            8 +        // start_time
+            8 +        // duration
+            1 +        // is_active
+            1 +        // round_type
+            4 + (32 * 100) + // seed_investors vector with max 100 investors
+            8 +
+            8,         // total_investors
         seeds = [b"ico"],
         bump
     )]
     pub ico_account: Account<'info, IcoAccount>,
+ 
     #[account(mut)]
     pub token_mint: Account<'info, Mint>,
     pub system_program: Program<'info, System>,
 }
-
-#[derive(Accounts)]
-pub struct UpdateIcoParameters<'info> {
-    #[account(mut)]
-    pub authority: Signer<'info>,
-    #[account(
-        mut,
-        seeds = [b"ico"],
-        bump
-    )]
-    pub ico_account: Account<'info, IcoAccount>,
-}
-
+ 
 #[derive(Accounts)]
 pub struct BuyTokens<'info> {
     #[account(mut)]
     pub buyer: Signer<'info>,
-    #[account(
-        mut,
-        seeds = [b"ico"],
-        bump
-    )]
+ 
+    #[account(mut, seeds = [b"ico"], bump)]
     pub ico_account: Account<'info, IcoAccount>,
+ 
     #[account(
-        init_if_needed,
-        payer = buyer, 
-        space = 8 + 32 + 8 + 1,
-        seeds = [b"purchase", buyer.key().as_ref()],
+        init,
+        payer = buyer,
+        space = 8 + 32 + 8 + 1 + 8 + 32, // discriminator + fields
+        seeds = [b"purchase",buyer.key().as_ref(),&ico_account.purchase_counter.to_le_bytes()],
         bump
     )]
     pub purchase_account: Account<'info, PurchaseAccount>,
+ 
     #[account(mut)]
     pub treasury_wallet: SystemAccount<'info>,
+ 
     pub token_program: Program<'info, token::Token>,
     pub system_program: Program<'info, System>,
 }
-
+ 
 #[derive(Accounts)]
 pub struct DistributeTokens<'info> {
     #[account(mut)]
     pub authority: Signer<'info>,
+ 
     #[account(
         mut,
         seeds = [b"ico"],
-        bump
+        bump,
+        has_one = authority
     )]
     pub ico_account: Account<'info, IcoAccount>,
-    #[account(mut)]
-    pub treasury_token_account: Account<'info, TokenAccount>,
-    #[account(mut)]
-    pub buyer_token_account: Account<'info, TokenAccount>,
+ 
     #[account(
         mut,
-        seeds = [b"purchase", purchase_account.buyer.as_ref()],
-        bump
+        seeds = [b"purchase",  purchase_account.buyer.as_ref()],
+        bump,
+        constraint = !purchase_account.is_distributed @ IcoError::AlreadyDistributed,
+        constraint = purchase_account.ico == ico_account.key() @ IcoError::InvalidPurchase
     )]
     pub purchase_account: Account<'info, PurchaseAccount>,
-    pub token_program: Program<'info, token::Token>,
-}
-
-#[derive(Accounts)]
-pub struct EndIco<'info> {
+ 
     #[account(
         mut,
-        seeds = [b"ico"],
-        bump
+        constraint = treasury_token_account.owner == authority.key() @ IcoError::Unauthorized,
+        constraint = treasury_token_account.mint == ico_account.token_mint @ IcoError::InvalidTokenMint
     )]
+    pub treasury_token_account: Account<'info, TokenAccount>,
+ 
+    #[account(mut)]
+    /// CHECK: Account checked in token transfer
+    pub buyer_token_account: UncheckedAccount<'info>,
+ 
+    pub token_program: Program<'info, token::Token>,
+    pub system_program: Program<'info, System>,
+}
+ 
+#[derive(Accounts)]
+pub struct UpdateIcoParameters<'info> {
+    #[account(mut)]
+    pub authority: Signer<'info>,
+    #[account(mut, seeds = [b"ico"], bump)]
     pub ico_account: Account<'info, IcoAccount>,
 }
-
+ 
+#[derive(Accounts)]
+pub struct EndIco<'info> {
+    #[account(mut, seeds = [b"ico"], bump)]
+    pub ico_account: Account<'info, IcoAccount>,
+}
+ 
 #[derive(Accounts)]
 pub struct AddSeedInvestor<'info> {
     #[account(mut)]
     pub authority: Signer<'info>,
-    #[account(
-        mut,
-        seeds = [b"ico"],
-        bump
-    )]
+    #[account(mut, seeds = [b"ico"], bump)]
     pub ico_account: Account<'info, IcoAccount>,
 }
-
+ 
 #[derive(Accounts)]
 pub struct RemoveSeedInvestor<'info> {
     #[account(mut)]
     pub authority: Signer<'info>,
-    #[account(
-        mut,
-        seeds = [b"ico"],
-        bump
-    )]
+    #[account(mut, seeds = [b"ico"], bump)]
     pub ico_account: Account<'info, IcoAccount>,
 }
-
+ 
 #[derive(Accounts)]
 pub struct GetSeedInvestors<'info> {
-    #[account(
-        seeds = [b"ico"],
-        bump
-    )]
+    #[account(seeds = [b"ico"], bump)]
     pub ico_account: Account<'info, IcoAccount>,
 }
-// Error Handling
+ 
 #[error_code]
 pub enum IcoError {
     #[msg("ICO is not currently active")]
@@ -408,14 +409,20 @@ pub enum IcoError {
     IcoStillActive,
     #[msg("You are not authorized to perform this action")]
     Unauthorized,
-    #[msg("Purchase account not found")]
-    PurchaseAccountNotFound,
-    #[msg("Buyer token account not found")]
-    BuyerTokenAccountNotFound,
+    #[msg("Purchase not found")]
+    PurchaseNotFound,
     #[msg("Mathematical overflow occurred")]
     MathOverflow,
     #[msg("Investor is not whitelisted for the seed round")]
     NotWhitelisted,
+    #[msg("Tokens already distributed for this purchase")]
+    AlreadyDistributed,
+    #[msg("Invalid purchase account")]
+    InvalidPurchase,
+    #[msg("Invalid token mint")]
+    InvalidTokenMint,
+    #[msg("Investor is already in the seed investors list")]
+    InvestorAlreadyExists,
 }
 
 
@@ -430,12 +437,14 @@ Based on the smart contract i create this files in my reactjs project
 src/pages/BuyTokens.js
 
 
+
 import React, { useState, useEffect } from 'react';
 import { useConnection, useWallet } from '@solana/wallet-adapter-react';
 import { PublicKey } from '@solana/web3.js';
 import { getProgram } from '../utils/anchor-connection';
 import * as anchor from '@project-serum/anchor';
 import { TOKEN_PROGRAM_ID, getAssociatedTokenAddress } from '@solana/spl-token';
+import { formatSol } from '../utils/formatters';
 
 const BuyTokens = () => {
   const { connection } = useConnection();
@@ -451,7 +460,9 @@ const BuyTokens = () => {
   }, [connection, wallet.publicKey]);
 
   const fetchIcoData = async () => {
+
     if (!wallet.publicKey) return;
+    
     try {
       const program = getProgram(connection, wallet);
       const [icoAccount] = await PublicKey.findProgramAddress(
@@ -462,7 +473,7 @@ const BuyTokens = () => {
       setIcoData(data);
     } catch (err) {
       console.error('Error fetching ICO data:', err);
-      setError('Failed to fetch ICO data');
+      setError('Failed to fetch ICO data. Please try again later.');
     }
   };
 
@@ -482,9 +493,11 @@ const BuyTokens = () => {
       );
 
       const mint = icoData.tokenMint;
+
       const treasuryWallet = icoData.authority;
 
       const buyerTokenAccount = await getAssociatedTokenAddress(mint, wallet.publicKey);
+
       const treasuryTokenAccount = await getAssociatedTokenAddress(mint, treasuryWallet);
 
       const [purchaseAccount] = await PublicKey.findProgramAddress(
@@ -507,10 +520,15 @@ const BuyTokens = () => {
         })
         .rpc();
 
-      setSuccess(`Tokens purchased successfully! TxID: ${tx}`);
+      setSuccess(`Tokens purchased successfully! Transaction ID: ${tx.substring(0, 8)}...`);
+      fetchIcoData(); // Refresh ICO data after successful purchase
     } catch (err) {
       console.error('Error buying tokens:', err);
-      setError(`Error: ${err.message}`);
+      if (err.message.includes('custom program error: 0x0')) {
+        setError('Token purchase failed. You may have already purchased tokens or there might be an issue with the ICO contract.');
+      } else {
+        setError('Token purchase failed. Please try again later.');
+      }
     } finally {
       setLoading(false);
     }
@@ -518,44 +536,71 @@ const BuyTokens = () => {
 
   return (
     <div className="max-w-lg mx-auto">
-      <div className="card">
-        <h2 className="text-2xl font-semibold mb-6">Buy Tokens</h2>
+      <div className="bg-white shadow-lg rounded-lg p-6">
+        <h2 className="text-2xl font-bold mb-6 text-gray-800">Buy Tokens</h2>
         <form onSubmit={handleBuyTokens} className="space-y-4">
           <div>
-            <label htmlFor="amount" className="label">
-              Amount of tokens to buy:
+            <label htmlFor="amount" className="block text-sm font-medium text-gray-700 mb-1">
+              Amount of tokens to buy (in SOL):
             </label>
             <input
               type="number"
               id="amount"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
-              className="input"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500"
               required
+              min="0"
+              step="0.000000001"
             />
           </div>
           <button
             type="submit"
-            disabled={loading}
-            className="btn btn-primary w-full"
+            disabled={loading || !wallet.publicKey}
+            className="w-full bg-sky-600 text-white py-2 px-4 rounded-md hover:bg-sky-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-sky-500 disabled:opacity-50 disabled:cursor-not-allowed transition duration-200"
           >
-            {loading ? 'Buying...' : 'Buy Tokens'}
+            {loading ? 'Processing...' : 'Buy Tokens'}
           </button>
         </form>
         {error && (
-          <div className="mt-4 p-4 bg-red-50 border border-red-200 text-red-600 rounded-md text-sm">
+          <div className="mt-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded-md text-sm">
             {error}
           </div>
         )}
         {success && (
-          <div className="mt-4 p-4 bg-green-50 border border-green-200 text-green-600 rounded-md text-sm">
+          <div className="mt-4 p-4 bg-green-100 border border-green-400 text-green-700 rounded-md text-sm">
             {success}
+          </div>
+        )}
+        {icoData && (
+          <div className="mt-6 p-4 bg-gray-100 rounded-md">
+            <h3 className="text-lg font-semibold mb-2 text-gray-800">Current ICO Status</h3>
+            <p className="text-sm text-gray-600"><strong>Token Price:</strong> {formatSol(icoData.tokenPrice)} SOL</p>
+            <p className="text-sm text-gray-600"><strong>Tokens Available:</strong> {formatSol(icoData.totalSupply - icoData.tokensSold)} SOL</p>
+            <div className="mt-2">
+              <div className="relative pt-1">
+                <div className="flex mb-2 items-center justify-between">
+                  <div>
+                    <span className="text-xs font-semibold inline-block py-1 px-2 uppercase rounded-full text-sky-600 bg-sky-200">
+                      {((Number(icoData.tokensSold) / Number(icoData.totalSupply)) * 100).toFixed(2)}% Sold
+                    </span>
+                  </div>
+                </div>
+                <div className="overflow-hidden h-2 mb-4 text-xs flex rounded bg-sky-200">
+                  <div
+                    style={{ width: `${(Number(icoData.tokensSold) / Number(icoData.totalSupply)) * 100}%` }}
+                    className="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-sky-500"
+                  ></div>
+                </div>
+              </div>
+            </div>
           </div>
         )}
       </div>
     </div>
   );
 };
+
 export default BuyTokens;
 
 
@@ -724,6 +769,7 @@ export default Dashboard;
 
 
 
+
 src/pages/DistributeToken.js
 
 
@@ -732,112 +778,139 @@ import React, { useState, useEffect } from 'react';
 import { useConnection, useWallet } from '@solana/wallet-adapter-react';
 import { PublicKey } from '@solana/web3.js';
 import { getProgram } from '../utils/anchor-connection';
-import { TOKEN_PROGRAM_ID, getAssociatedTokenAddress } from '@solana/spl-token';
-
-import { Buffer } from "buffer/"; 
-window.Buffer = Buffer;
+import { lamportsToSol } from '../utils/formatters';
+import { distributeTokens } from '../utils/ico-instructions';
 
 const DistributeTokens = () => {
   const { connection } = useConnection();
   const wallet = useWallet();
   const [purchases, setPurchases] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
   useEffect(() => {
-    fetchPurchases();
+    if (wallet.publicKey) {
+      fetchPurchases();
+    }
   }, [connection, wallet.publicKey]);
 
   const fetchPurchases = async () => {
-    if (!wallet.publicKey) return;
-    try {
-      const program = getProgram(connection, wallet);
-      // Fetch all purchase accounts
-      // This is a simplified example and may need to be adjusted based on your actual implementation
-      const purchaseAccounts = await program.account.purchaseAccount.all();
-      setPurchases(purchaseAccounts);
-    } catch (err) {
-      console.error('Error fetching purchases:', err);
-      setError('Failed to fetch purchases');
-    }
-  };
-
-  const handleDistributeTokens = async (purchase) => {
-    if (!wallet.publicKey || !wallet.signTransaction) return;
-
-    setLoading(true);
+    setIsLoading(true);
     setError('');
-    setSuccess('');
-
     try {
       const program = getProgram(connection, wallet);
       const [icoAccount] = await PublicKey.findProgramAddress(
         [Buffer.from("ico")],
         program.programId
       );
-
       const icoData = await program.account.icoAccount.fetch(icoAccount);
-      const mint = icoData.tokenMint;
 
-      const treasuryTokenAccount = await getAssociatedTokenAddress(mint, wallet.publicKey);
-      const buyerTokenAccount = await getAssociatedTokenAddress(mint, purchase.account.buyer);
-
-      await program.methods
-        .distributeTokens()
-        .accounts({
-          authority: wallet.publicKey,
-          icoAccount,
-          treasuryTokenAccount,
-          buyerTokenAccount,
-          purchaseAccount: purchase.publicKey,
-          tokenProgram: TOKEN_PROGRAM_ID,
-        })
-        .rpc();
-
-      setSuccess(`Tokens distributed successfully to ${purchase.account.buyer.toBase58()}`);
-      fetchPurchases();
+      // Fetch all purchase accounts
+      const purchaseAccounts = await program.account.purchaseAccount.all();
+      
+      setPurchases(purchaseAccounts.map(account => ({
+        buyer: account.account.buyer.toString(),
+        amount: account.account.amount,
+        isDistributed: account.account.isDistributed,
+        timestamp: account.account.timestamp,
+      })));
     } catch (err) {
-      console.error('Error distributing tokens:', err);
-      setError(`Error: ${err.message}`);
+      console.error('Error:', err);
+      setError('Failed to fetch purchases');
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   };
 
-  return (
-    <div className="max-w-2xl mx-auto">
-      <div className="p-6">
-        <h2 className="text-2xl font-semibold mb-6">Distribute Tokens</h2>
-        {error && (
-          <div className="mb-4 p-4 bg-red-50 border border-red-200 text-red-600 rounded-md text-sm">
-            {error}
-          </div>
-        )}
-        {success && (
-          <div className="mb-4 p-4 bg-green-50 border border-green-200 text-green-600 rounded-md text-sm">
-            {success}
-          </div>
-        )}
-        <ul className="space-y-4">
-          {purchases.map((purchase, index) => (
-            <li key={index} className="bg-white shadow-md rounded-lg p-4">
-              <p className="font-semibold">Buyer: {purchase.account.buyer.toBase58()}</p>
-              <p>Amount: {purchase.account.amount.toString()} tokens</p>
-              <p>Distributed: {purchase.account.isDistributed ? 'Yes' : 'No'}</p>
-              {!purchase.account.isDistributed && (
-                <button
-                  onClick={() => handleDistributeTokens(purchase)}
-                  disabled={loading}
-                  className="mt-2 bg-black hover:bg-gray-800 text-white"
-                >
-                  {loading ? 'Distributing...' : 'Distribute Tokens'}
-                </button>
-              )}
-            </li>
-          ))}
-        </ul>
+  const handleDistribute = async (buyer) => {
+    setError('');
+    setSuccess('');
+    setIsLoading(true);
+    try {
+      const program = getProgram(connection, wallet);
+      const [purchaseAccount] = await PublicKey.findProgramAddress(
+        [Buffer.from("purchase"), new PublicKey(buyer).toBuffer()],
+        program.programId
+      );
+      
+      await distributeTokens(connection, wallet, purchaseAccount);
+      setSuccess(`Tokens distributed successfully to ${buyer}`);
+      fetchPurchases(); // Refresh purchase data after distribution
+    } catch (err) {
+      console.error('Error:', err);
+      setError(err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  if (!wallet.publicKey) {
+    return (
+      <div className="text-center py-12">
+        <h2 className="text-2xl font-semibold mb-4">Distribute Tokens</h2>
+        <p className="text-gray-600">Please connect your wallet to distribute tokens.</p>
       </div>
+    );
+  }
+
+  return (
+    <div className="max-w-4xl mx-auto">
+      <h1 className="text-3xl font-bold mb-6">Distribute Tokens</h1>
+      <div className="bg-white rounded-lg shadow-md overflow-hidden">
+        <h2 className="text-xl font-semibold p-6 bg-gray-50 border-b">Token Purchases</h2>
+        {isLoading ? (
+          <div className="text-center py-12">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
+            <p className="mt-4 text-gray-600">Loading purchases...</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Buyer</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {purchases.map((purchase) => (
+                  <tr key={purchase.buyer}>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{purchase.buyer}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{lamportsToSol(purchase.amount).toFixed(4)} SOL</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {purchase.isDistributed ? (
+                        <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
+                          Distributed
+                        </span>
+                      ) : (
+                        <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">
+                          Pending
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                      {!purchase.isDistributed && (
+                        <button
+                          onClick={() => handleDistribute(purchase.buyer)}
+                          className="text-primary-600 hover:text-primary-900"
+                          disabled={isLoading}
+                        >
+                          Distribute
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+      {error && <p className="mt-4 text-red-600">{error}</p>}
+      {success && <p className="mt-4 text-green-600">{success}</p>}
     </div>
   );
 };
@@ -849,82 +922,125 @@ export default DistributeTokens;
 
 
 
+
+
+
 src/pages/EndIco.js
 
 
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useConnection, useWallet } from '@solana/wallet-adapter-react';
 import { PublicKey } from '@solana/web3.js';
 import { getProgram } from '../utils/anchor-connection';
-
-import { Buffer } from "buffer/"; 
-window.Buffer = Buffer;
+import { lamportsToSol } from '../utils/formatters';
+import { endIco } from '../utils/ico-instructions';
 
 const EndIco = () => {
   const { connection } = useConnection();
   const wallet = useWallet();
-  const [loading, setLoading] = useState(false);
+  const [icoData, setIcoData] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
-  const handleEndIco = async () => {
-    if (!wallet.publicKey || !wallet.signTransaction) return;
+  useEffect(() => {
+    if (wallet.publicKey) {
+      fetchIcoData();
+    }
+  }, [connection, wallet.publicKey]);
 
-    setLoading(true);
-    setError('');
-    setSuccess('');
-
+  const fetchIcoData = async () => {
     try {
       const program = getProgram(connection, wallet);
       const [icoAccount] = await PublicKey.findProgramAddress(
         [Buffer.from("ico")],
         program.programId
       );
-
-      await program.methods
-        .endIco()
-        .accounts({
-          icoAccount,
-          authority: wallet.publicKey,
-        })
-        .rpc();
-
-      setSuccess('ICO ended successfully!');
+      const data = await program.account.icoAccount.fetch(icoAccount);
+      setIcoData(data);
     } catch (err) {
-      console.error('Error ending ICO:', err);
-      setError(`Error: ${err.message}`);
+      console.error('Error:', err);
+      setError('Failed to fetch ICO data');
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   };
 
+  const handleEndIco = async () => {
+    setError('');
+    setSuccess('');
+    setIsLoading(true);
+    try {
+      await endIco(connection, wallet);
+      setSuccess('ICO ended successfully');
+      fetchIcoData(); // Refresh ICO data after ending
+    } catch (err) {
+      console.error('Error:', err);
+      setError(err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  if (!wallet.publicKey) {
+    return (
+      <div className="text-center py-12">
+        <h2 className="text-2xl font-semibold mb-4">End ICO</h2>
+        <p className="text-gray-600">Please connect your wallet to end the ICO.</p>
+      </div>
+    );
+  }
+
   return (
-    <div className="max-w-lg mx-auto">
-      <div className="p-6">
-        <h2 className="text-2xl font-semibold mb-6">End ICO</h2>
-        <div className="space-y-4">
-          <p className="text-red-600">
-            Warning: This action will end the ICO and cannot be undone. Make sure all tokens have been distributed before ending the ICO.
-          </p>
-          <button
-            onClick={handleEndIco}
-            disabled={loading}
-            className="w-full bg-red-600 hover:bg-red-700 text-white"
-          >
-            {loading ? 'Ending ICO...' : 'End ICO'}
-          </button>
-          {error && (
-            <div className="p-4 bg-red-50 border border-red-200 text-red-600 rounded-md text-sm">
-              {error}
+    <div className="max-w-2xl mx-auto">
+      <h1 className="text-3xl font-bold mb-6">End ICO</h1>
+      <div className="bg-white rounded-lg shadow-md p-6">
+        {isLoading ? (
+          <div className="text-center py-12">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
+            <p className="mt-4 text-gray-600">Loading ICO data...</p>
+          </div>
+        ) : (
+          <>
+            <div className="mb-6">
+              <h2 className="text-xl font-semibold mb-4">ICO Status</h2>
+              <p className="text-lg">
+                Status: {' '}
+                {icoData?.isActive ? (
+                  <span className="text-green-600 font-semibold">Active</span>
+                ) : (
+                  <span className="text-red-600 font-semibold">Inactive</span>
+                )}
+              </p>
+              <p className="text-lg mt-2">
+                Tokens Sold: {lamportsToSol(icoData?.tokensSold).toFixed(4)} SOL
+              </p>
+              <p className="text-lg mt-2">
+                Total Raised: {lamportsToSol(icoData?.totalSupply).toFixed(4)} SOL
+              </p>
             </div>
-          )}
-          {success && (
-            <div className="p-4 bg-green-50 border border-green-200 text-green-600 rounded-md text-sm">
-              {success}
-            </div>
-          )}
-        </div>
+            {icoData?.isActive && (
+              <div className="mt-6">
+                <button
+                  onClick={handleEndIco}
+                  className="w-full bg-red-600 text-white py-2 px-4 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50"
+                  disabled={isLoading}
+                >
+                  {isLoading ? 'Ending ICO...' : 'End ICO'}
+                </button>
+                <p className="mt-2 text-sm text-gray-600">
+                  Warning: This action is irreversible. Make sure you want to end the ICO before proceeding.
+                </p>
+              </div>
+            )}
+            {!icoData?.isActive && (
+              <p className="text-lg font-semibold text-center">The ICO has already ended.</p>
+            )}
+          </>
+        )}
+        {error && <p className="mt-4 text-red-600">{error}</p>}
+        {success && <p className="mt-4 text-green-600">{success}</p>}
       </div>
     </div>
   );
@@ -936,7 +1052,11 @@ export default EndIco;
 
 
 
+
+
+
 src/pages/InitializeIco.js
+
 
 
 import React, { useState } from 'react';
@@ -944,6 +1064,12 @@ import { useConnection, useWallet } from '@solana/wallet-adapter-react';
 import { PublicKey } from '@solana/web3.js';
 import { getProgram } from '../utils/anchor-connection';
 import * as anchor from '@project-serum/anchor';
+
+import { Buffer } from "buffer";
+
+Buffer.from("anything", "base64");
+window.Buffer = window.Buffer || require("buffer").Buffer;
+
 
 const InitializeIco = () => {
   const { connection } = useConnection();
@@ -1081,7 +1207,9 @@ export default InitializeIco;
 
 
 
+
 src/pages/ManageInvestors.js
+
 
 
 import React, { useState, useEffect } from 'react';
@@ -1196,13 +1324,13 @@ const ManageInvestors = () => {
                 value={newInvestor}
                 onChange={(e) => setNewInvestor(e.target.value)}
                 placeholder="Enter Solana address"
-                className="flex-grow px-3 py-2 placeholder-gray-400 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
+                className="flex-grow px-3 py-2 placeholder-gray-400 border rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-600 focus:border-transparent"
                 required
               />
               <button
                 type="submit"
                 disabled={loading}
-                className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline transition duration-150 ease-in-out"
+                className="bg-sky-600 hover:bg-sky-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline transition duration-150 ease-in-out"
               >
                 {loading ? 'Adding...' : 'Add Investor'}
               </button>
@@ -1238,14 +1366,15 @@ const ManageInvestors = () => {
     </div>
   );
 };
-
 export default ManageInvestors;
 
 
 
 
 
+
 src/pages/TokenBalance.js
+
 
 
 import React, { useState, useEffect } from 'react';
@@ -1256,8 +1385,14 @@ import {
   getAssociatedTokenAddress,
   getAccount,
 } from '@solana/spl-token';
-import { formatLamports } from '../utils/formatters';
+import { formatSol } from '../utils/formatters';
 import { getProgram } from '../utils/anchor-connection';
+
+import { Buffer } from "buffer";
+
+Buffer.from("anything", "base64");
+window.Buffer = window.Buffer || require("buffer").Buffer;
+
 
 const TokenBalance = () => {
   const { connection } = useConnection();
@@ -1314,7 +1449,7 @@ const TokenBalance = () => {
 
   if (loading) return (
     <div className="flex justify-center items-center h-64">
-      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500"></div>
+      <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"></div>
     </div>
   );
 
@@ -1333,11 +1468,11 @@ const TokenBalance = () => {
           <div className="space-y-4">
             <div className="bg-indigo-100 rounded-lg p-4">
               <p className="text-sm font-medium text-indigo-600">Current Balance:</p>
-              <p className="text-3xl font-bold text-indigo-800">{formatLamports(balance)} tokens</p>
+              <p className="text-3xl font-bold text-indigo-800">{formatSol(balance)} SOL</p>
             </div>
             <div className="bg-green-100 rounded-lg p-4">
               <p className="text-sm font-medium text-green-600">Total Purchased:</p>
-              <p className="text-3xl font-bold text-green-800">{formatLamports(purchaseAmount)} tokens</p>
+              <p className="text-3xl font-bold text-green-800">{formatSol(purchaseAmount)} SOL</p>
             </div>
           </div>
         </div>
@@ -1365,13 +1500,19 @@ export default TokenBalance;
 src/pages/UpdateIcoParameter.js
 
 
+
 import React, { useState, useEffect } from 'react';
 import { useConnection, useWallet } from '@solana/wallet-adapter-react';
 import { PublicKey } from '@solana/web3.js';
 import { getProgram } from '../utils/anchor-connection';
 import * as anchor from '@project-serum/anchor';
 import { getRoundTypeFromString, getRoundTypeString } from '../utils/enum-helpers';
-import { formatUnixTimestamp } from '../utils/formatters';
+import { formatUnixTimestamp, formatSol } from '../utils/formatters';
+
+import { Buffer } from "buffer";
+
+Buffer.from("anything", "base64");
+window.Buffer = window.Buffer || require("buffer").Buffer;
 
 const UpdateIcoParameters = () => {
   const { connection } = useConnection();
@@ -1467,8 +1608,8 @@ const UpdateIcoParameters = () => {
           {currentParameters && (
             <div className="mb-6 p-4 bg-gray-100 rounded-lg">
               <h3 className="text-lg font-semibold mb-2">Current Parameters:</h3>
-              <p><strong>Total Supply:</strong> {currentParameters.totalSupply.toString()}</p>
-              <p><strong>Token Price:</strong> {currentParameters.tokenPrice.toString()} lamports</p>
+              <p><strong>Total Supply:</strong> {formatSol(currentParameters.totalSupply)} SOL</p>
+              <p><strong>Token Price:</strong> {formatSol(currentParameters.tokenPrice)} SOL</p>
               <p><strong>Start Time:</strong> {formatUnixTimestamp(currentParameters.startTime)}</p>
               <p><strong>Duration:</strong> {currentParameters.duration.toString()} seconds</p>
               <p><strong>Round Type:</strong> {getRoundTypeString(currentParameters.roundType)}</p>
@@ -1477,7 +1618,7 @@ const UpdateIcoParameters = () => {
           <form onSubmit={handleUpdateParameters} className="space-y-4">
             <div>
               <label htmlFor="totalSupply" className="block text-sm font-medium text-gray-700">
-                Total Supply:
+                Total Supply (in SOL):
               </label>
               <input
                 type="text"
@@ -1485,12 +1626,12 @@ const UpdateIcoParameters = () => {
                 value={totalSupply}
                 onChange={(e) => setTotalSupply(e.target.value)}
                 placeholder="Leave blank to keep current value"
-                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-purple-500 focus:border-purple-500 sm:text-sm"
+                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
               />
             </div>
             <div>
               <label htmlFor="tokenPrice" className="block text-sm font-medium text-gray-700">
-                Token Price (in lamports):
+                Token Price (in SOL):
               </label>
               <input
                 type="text"
@@ -1498,7 +1639,7 @@ const UpdateIcoParameters = () => {
                 value={tokenPrice}
                 onChange={(e) => setTokenPrice(e.target.value)}
                 placeholder="Leave blank to keep current value"
-                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-purple-500 focus:border-purple-500 sm:text-sm"
+                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
               />
             </div>
             <div>
@@ -1510,7 +1651,7 @@ const UpdateIcoParameters = () => {
                 id="startTime"
                 value={startTime}
                 onChange={(e) => setStartTime(e.target.value)}
-                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-purple-500 focus:border-purple-500 sm:text-sm"
+                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
               />
             </div>
             <div>
@@ -1523,7 +1664,7 @@ const UpdateIcoParameters = () => {
                 value={duration}
                 onChange={(e) => setDuration(e.target.value)}
                 placeholder="Leave blank to keep current value"
-                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-purple-500 focus:border-purple-500 sm:text-sm"
+                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
               />
             </div>
             <div>
@@ -1534,7 +1675,7 @@ const UpdateIcoParameters = () => {
                 id="roundType"
                 value={roundType}
                 onChange={(e) => setRoundType(e.target.value)}
-                className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-purple-500 focus:border-purple-500 sm:text-sm rounded-md"
+                className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
               >
                 <option value="">Select to change round type</option>
                 <option value="SeedRound">Seed Round</option>
@@ -1565,8 +1706,9 @@ const UpdateIcoParameters = () => {
     </div>
   );
 };
-
 export default UpdateIcoParameters;
+
+
 
 
 src/component/Footer.js
@@ -1576,7 +1718,7 @@ import React from 'react';
 
 const Footer = () => {
   return (
-    <footer className="bg-gray-800 text-white p-4 mt-8">
+    <footer className="bg-gray-800 text-white p-4">
       <div className="container mx-auto text-center">
         <p>&copy; 2023 Solana ICO. All rights reserved.</p>
       </div>
@@ -1585,6 +1727,9 @@ const Footer = () => {
 };
 
 export default Footer;
+
+
+
 
 
 
@@ -1614,6 +1759,8 @@ const Header = () => {
 };
 
 export default Header;
+
+
 
 
 
@@ -1700,6 +1847,7 @@ export default IcoDetails;
 
 
 
+
 src/components/Layout.js
 
 
@@ -1709,12 +1857,14 @@ import Sidebar from './Sidebar';
 
 const Layout = ({ children }) => {
   return (
-    <div className="min-h-screen bg-gray-100">
-      <Navbar />
-      <div className="flex">
-        <Sidebar />
-        <main className="flex-1 p-8">
-          <div className="max-w-7xl mx-auto">{children}</div>
+    <div className="flex h-screen bg-gray-100 font-sans">
+      <Sidebar />
+      <div className="flex flex-col flex-1 overflow-hidden">
+        <Navbar />
+        <main className="flex-1 overflow-x-hidden overflow-y-auto bg-gray-100">
+          <div className="container mx-auto px-6 py-8">
+            {children}
+          </div>
         </main>
       </div>
     </div>
@@ -1722,6 +1872,9 @@ const Layout = ({ children }) => {
 };
 
 export default Layout;
+
+
+
 
 
 
@@ -1766,6 +1919,7 @@ const Navbar = () => {
     </nav>
   );
 };
+
 export default Navbar;
 
 
@@ -1797,73 +1951,60 @@ const Sidebar = () => {
     { name: 'End ICO', href: '/end-ico', icon: 'M13 10V3L4 14h7v7l9-11h-7z' },
   ];
 
-  return (
-    <div className="bg-white w-64 min-h-screen shadow-md">
-      <div className="py-4 px-3">
-        <nav className="mt-5 space-y-2">
-          {navigation.map((item) => (
-            <Link
-              key={item.name}
-              to={item.href}
-              className={`${
-                location.pathname === item.href
-                  ? 'bg-slate-100 text-slate-900'
-                  : 'text-gray-600 hover:bg-slate-50 hover:text-slate-900'
-              } group flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors duration-150 ease-in-out`}
-            >
-              <svg
-                className={`${
-                  location.pathname === item.href ? 'text-slate-500' : 'text-gray-400 group-hover:text-slate-500'
-                } mr-3 flex-shrink-0 h-6 w-6 transition-colors duration-150 ease-in-out`}
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={item.icon} />
-              </svg>
-              {item.name}
-            </Link>
-          ))}
+  const NavItem = ({ item, isAdmin = false }) => (
+    <Link
+      to={item.href}
+      className={`${
+        location.pathname === item.href
+          ? 'bg-primary-100 text-primary-900'
+          : 'text-gray-600 hover:bg-primary-50 hover:text-primary-900'
+      } group flex items-center px-2 py-2 text-sm font-medium rounded-md transition-colors duration-150 ease-in-out`}
+    >
+      <svg
+        className={`${
+          location.pathname === item.href ? 'text-primary-500' : 'text-gray-400 group-hover:text-primary-500'
+        } mr-3 flex-shrink-0 h-6 w-6 transition-colors duration-150 ease-in-out`}
+        xmlns="http://www.w3.org/2000/svg"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+        aria-hidden="true"
+      >
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={item.icon} />
+      </svg>
+      {item.name}
+    </Link>
+  );
 
-          {isAdminWallet(publicKey) && (
-            <>
-              <div className="mt-8 mb-2 px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                ADMIN
-              </div>
-              {adminNavigation.map((item) => (
-                <Link
-                  key={item.name}
-                  to={item.href}
-                  className={`${
-                    location.pathname === item.href
-                      ? 'bg-slate-100 text-slate-900'
-                      : 'text-gray-600 hover:bg-slate-50 hover:text-slate-900'
-                  } group flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors duration-150 ease-in-out`}
-                >
-                  <svg
-                    className={`${
-                      location.pathname === item.href ? 'text-slate-500' : 'text-gray-400 group-hover:text-slate-500'
-                    } mr-3 flex-shrink-0 h-6 w-6 transition-colors duration-150 ease-in-out`}
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={item.icon} />
-                  </svg>
-                  {item.name}
-                </Link>
+  return (
+    <div className="hidden md:flex md:flex-shrink-0">
+      <div className="flex flex-col w-64">
+        <div className="flex flex-col h-0 flex-1 bg-white border-r border-gray-200">
+          <div className="flex-1 flex flex-col pt-5 pb-4 overflow-y-auto">
+            <nav className="mt-5 flex-1 px-2 bg-white space-y-1">
+              {navigation.map((item) => (
+                <NavItem key={item.name} item={item} />
               ))}
-            </>
-          )}
-        </nav>
+              {isAdminWallet(publicKey) && (
+                <>
+                  <div className="mt-8 mb-2 px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    Admin
+                  </div>
+                  {adminNavigation.map((item) => (
+                    <NavItem key={item.name} item={item} isAdmin />
+                  ))}
+                </>
+              )}
+            </nav>
+          </div>
+        </div>
       </div>
     </div>
   );
 };
 
 export default Sidebar;
+
 
 
 
@@ -1874,6 +2015,8 @@ export const isAdminWallet = (publicKey) => {
   const adminAddress = process.env.REACT_APP_OWNER_ADDRESS;
   return publicKey && publicKey.toBase58() === adminAddress;
 };
+
+
 
 
 
@@ -1899,6 +2042,9 @@ export const getProgram = (connection, wallet) => {
   
   return new Program(idl, programID, provider);
 };
+
+
+
 
 
 src/utils/enum-helpers.js
@@ -1932,18 +2078,177 @@ export const getRoundTypeString = (roundType) => {
 
 
 
+
+
 src/utils/formatters.js
 
 
 import { LAMPORTS_PER_SOL } from '@solana/web3.js';
 
+export const lamportsToSol = (lamports) => {
+  return lamports / LAMPORTS_PER_SOL;
+};
+
+export const solToLamports = (sol) => {
+  return Math.floor(sol * LAMPORTS_PER_SOL);
+};
+
 export const formatUnixTimestamp = (timestamp) => {
-  return new Date(timestamp * 1000).toLocaleString();
+  const date = new Date(timestamp * 1000);
+  return date.toLocaleString();
 };
 
 export const formatLamports = (lamports) => {
   return (lamports / LAMPORTS_PER_SOL).toFixed(9);
 };
+
+
+export const formatSol = (lamports) => {
+  return (lamports / LAMPORTS_PER_SOL).toFixed(4);
+};
+
+
+
+
+
+src/utils/ico-instructions.js
+
+
+
+import { getProgram } from './anchor-connection';
+import { PublicKey } from '@solana/web3.js';
+import { TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID } from '@solana/spl-token';
+
+export const buyTokens = async (connection, wallet, amount) => {
+  const program = getProgram(connection, wallet);
+  const [icoAccount] = await PublicKey.findProgramAddress(
+    [Buffer.from("ico")],
+    program.programId
+  );
+  const [tokenAccount] = await PublicKey.findProgramAddress(
+    [Buffer.from("token_account"), wallet.publicKey.toBuffer()],
+    program.programId
+  );
+
+  await program.methods
+    .buyTokens(amount)
+    .accounts({
+      ico: icoAccount,
+      tokenAccount: tokenAccount,
+      buyer: wallet.publicKey,
+    })
+    .rpc();
+};
+
+export const addToWhitelist = async (connection, wallet, investorPublicKey) => {
+  const program = getProgram(connection, wallet);
+  const [icoAccount] = await PublicKey.findProgramAddress(
+    [Buffer.from("ico")],
+    program.programId
+  );
+
+  await program.methods
+    .addToWhitelist(investorPublicKey)
+    .accounts({
+      ico: icoAccount,
+      authority: wallet.publicKey,
+    })
+    .rpc();
+};
+
+export const removeFromWhitelist = async (connection, wallet, investorPublicKey) => {
+  const program = getProgram(connection, wallet);
+  const [icoAccount] = await PublicKey.findProgramAddress(
+    [Buffer.from("ico")],
+    program.programId
+  );
+
+  await program.methods
+    .removeFromWhitelist(investorPublicKey)
+    .accounts({
+      ico: icoAccount,
+      authority: wallet.publicKey,
+    })
+    .rpc();
+};
+
+export const updateIcoParameters = async (connection, wallet, params) => {
+  const program = getProgram(connection, wallet);
+  const [icoAccount] = await PublicKey.findProgramAddress(
+    [Buffer.from("ico")],
+    program.programId
+  );
+
+  await program.methods
+    .updateIcoParameters(params)
+    .accounts({
+      ico: icoAccount,
+      authority: wallet.publicKey,
+    })
+    .rpc();
+};
+
+export const distributeTokens = async (connection, wallet, purchaseAccount) => {
+  const program = getProgram(connection, wallet);
+  const [icoAccount] = await PublicKey.findProgramAddress(
+    [Buffer.from("ico")],
+    program.programId
+  );
+
+  const [treasuryTokenAccount] = await PublicKey.findProgramAddress(
+    [Buffer.from("treasury"), icoAccount.toBuffer()],
+    program.programId
+  );
+
+  const purchase = await program.account.purchaseAccount.fetch(purchaseAccount);
+  const buyerTokenAccount = await getAssociatedTokenAddress(
+    program.programId,
+    purchase.buyer
+  );
+
+  await program.methods
+    .distributeTokens()
+    .accounts({
+      authority: wallet.publicKey,
+      icoAccount: icoAccount,
+      purchaseAccount: purchaseAccount,
+      treasuryTokenAccount: treasuryTokenAccount,
+      buyerTokenAccount: buyerTokenAccount,
+      tokenProgram: TOKEN_PROGRAM_ID,
+    })
+    .rpc();
+};
+
+export const endIco = async (connection, wallet) => {
+  const program = getProgram(connection, wallet);
+  const [icoAccount] = await PublicKey.findProgramAddress(
+    [Buffer.from("ico")],
+    program.programId
+  );
+
+  await program.methods
+    .endIco()
+    .accounts({
+      ico: icoAccount,
+      authority: wallet.publicKey,
+    })
+    .rpc();
+};
+
+// Helper function to get associated token address
+async function getAssociatedTokenAddress(mint, owner) {
+  return (await PublicKey.findProgramAddress(
+    [
+      owner.toBuffer(),
+      TOKEN_PROGRAM_ID.toBuffer(),
+      mint.toBuffer(),
+    ],
+    ASSOCIATED_TOKEN_PROGRAM_ID
+  ))[0];
+}
+
+
+
 
 
 
@@ -1953,7 +2258,7 @@ src/App.js
 
 import React, { useMemo } from 'react';
 import { BrowserRouter as Router, Route, Routes, Navigate } from 'react-router-dom';
-import { ConnectionProvider, useWallet, WalletProvider } from '@solana/wallet-adapter-react';
+import { ConnectionProvider, WalletProvider } from '@solana/wallet-adapter-react';
 import { WalletAdapterNetwork } from '@solana/wallet-adapter-base';
 import { PhantomWalletAdapter } from '@solana/wallet-adapter-wallets';
 import { WalletModalProvider } from '@solana/wallet-adapter-react-ui';
@@ -1966,14 +2271,9 @@ import ManageInvestors from './pages/ManageInvestors';
 import UpdateIcoParameters from './pages/UpdateIcoParameters';
 import DistributeTokens from './pages/DistributeTokens';
 import EndIco from './pages/EndIco';
-import { isAdminWallet } from './utils/admin-check';
+import { AdminRoute } from './components/AdminRoute';
 import '@solana/wallet-adapter-react-ui/styles.css';
 import './App.css';
-
-const AdminRoute = ({ children }) => {
-  const { publicKey } = useWallet();
-  return isAdminWallet(publicKey) ? children : <Navigate to="/" />;
-};
 
 function App() {
   const network = WalletAdapterNetwork.Devnet;
@@ -2008,6 +2308,8 @@ export default App;
 
 
 
+
+
 src/index.js
 
 
@@ -2024,9 +2326,7 @@ root.render(
     <App />
   </React.StrictMode>
 );
-
 reportWebVitals();
-
 
 
 
@@ -2034,7 +2334,7 @@ reportWebVitals();
 .env 
 
 
-REACT_APP_PROGRAM_ID=56TcuGYiK1kU1iTr1XLCYV6a4PYT8o4rqzmqvQHdEFNE
+REACT_APP_PROGRAM_ID=FyCz92Au4vcsanwaJZ8PrykVf6oPgreoYKmCque5Qq45
 REACT_APP_TOKEN_MINT_ADDRESS=7GYz5XMx5BQrMtexJZrrJQM1WfhHnWAmf8Snhaqqmf3U
 REACT_APP_OWNER_ADDRESS=DYkCAokwibanNxMvixmoZFQDwayGDJWfJ9moZjDRpUvW
 REACT_APP_NETWORK=devnet

@@ -1,16 +1,16 @@
 use anchor_lang::prelude::*;
+use anchor_spl::associated_token::AssociatedToken;
 use anchor_spl::{
-    associated_token::AssociatedToken,
-    token::{self, Mint, TokenAccount, Transfer},
+    associated_token::get_associated_token_address,
+    token::{self, Mint, TokenAccount},
 };
-
-declare_id!("56TcuGYiK1kU1iTr1XLCYV6a4PYT8o4rqzmqvQHdEFNE");
-
+ 
+declare_id!("GmLfd5j41fTbgL9G3C58Q4xUHbwmyXKfEE22dJg9s9QY");
+ 
 #[program]
 pub mod advanced_ico_program {
     use super::*;
-
-    // Initialize the ICO
+ 
     pub fn initialize(
         ctx: Context<Initialize>,
         total_supply: u64,
@@ -30,11 +30,39 @@ pub mod advanced_ico_program {
         ico.is_active = true;
         ico.round_type = round_type;
         ico.seed_investors = Vec::new();
-
+        ico.total_investors = 0;
+        ico.purchase_counter = 0;
+ 
         Ok(())
     }
-
-    // Update ICO parameters
+ 
+    pub fn add_seed_investor(ctx: Context<AddSeedInvestor>, investor: Pubkey) -> Result<()> {
+        let ico = &mut ctx.accounts.ico_account;
+        require!(
+            ctx.accounts.authority.key() == ico.authority,
+            IcoError::Unauthorized
+        );
+        require!(
+            !ico.seed_investors.contains(&investor),
+            IcoError::InvestorAlreadyExists
+        );
+ 
+        ico.seed_investors.push(investor);
+        Ok(())
+    }
+ 
+    pub fn remove_seed_investor(ctx: Context<RemoveSeedInvestor>, investor: Pubkey) -> Result<()> {
+        let ico = &mut ctx.accounts.ico_account;
+        require!(
+            ctx.accounts.authority.key() == ico.authority,
+            IcoError::Unauthorized
+        );
+        if let Some(index) = ico.seed_investors.iter().position(|&x| x == investor) {
+            ico.seed_investors.remove(index);
+        }
+        Ok(())
+    }
+ 
     pub fn update_ico_parameters(
         ctx: Context<UpdateIcoParameters>,
         total_supply: Option<u64>,
@@ -44,93 +72,57 @@ pub mod advanced_ico_program {
         round_type: Option<RoundType>,
     ) -> Result<()> {
         let ico = &mut ctx.accounts.ico_account;
-
         require!(
             ctx.accounts.authority.key() == ico.authority,
             IcoError::Unauthorized
         );
-
+ 
         if let Some(supply) = total_supply {
             ico.total_supply = supply;
         }
-
         if let Some(price) = token_price {
             ico.token_price = price;
         }
-
         if let Some(start) = start_time {
             ico.start_time = start;
         }
-
         if let Some(dur) = duration {
             ico.duration = dur;
         }
-
         if let Some(round) = round_type {
             ico.round_type = round;
         }
-
         Ok(())
     }
-
-    // Add a seed investor to the whitelist
-    pub fn add_seed_investor(ctx: Context<AddSeedInvestor>, investor: Pubkey) -> Result<()> {
-        let ico = &mut ctx.accounts.ico_account;
-
-        require!(
-            ctx.accounts.authority.key() == ico.authority,
-            IcoError::Unauthorized
-        );
-
-        ico.seed_investors.push(investor);
-
-        Ok(())
-    }
-
-    // Remove a seed investor from the whitelist
-    pub fn remove_seed_investor(ctx: Context<RemoveSeedInvestor>, investor: Pubkey) -> Result<()> {
-        let ico = &mut ctx.accounts.ico_account;
-
-        require!(
-            ctx.accounts.authority.key() == ico.authority,
-            IcoError::Unauthorized
-        );
-
-        if let Some(index) = ico.seed_investors.iter().position(|&x| x == investor) {
-            ico.seed_investors.remove(index);
-        }
-
-        Ok(())
-    }
-
-    // Buy tokens during the ICO
+ 
     pub fn buy_tokens(ctx: Context<BuyTokens>, amount: u64) -> Result<()> {
         let current_time = Clock::get()?.unix_timestamp;
         let ico = &mut ctx.accounts.ico_account;
-
+ 
         require!(
             ico.is_active
                 && current_time >= ico.start_time
                 && current_time < ico.start_time + ico.duration,
             IcoError::IcoNotActive
         );
-
+ 
         if ico.round_type == RoundType::SeedRound {
             require!(
                 ico.seed_investors.contains(&ctx.accounts.buyer.key()),
                 IcoError::NotWhitelisted
             );
         }
-
+ 
         require!(
             ico.tokens_sold + amount <= ico.total_supply,
             IcoError::InsufficientTokens
         );
-
+ 
         let total_cost = amount
             .checked_mul(ico.token_price)
             .ok_or(IcoError::MathOverflow)?;
-
+ 
+        // Transfer payment
         let transfer_context = CpiContext::new(
             ctx.accounts.system_program.to_account_info(),
             anchor_lang::system_program::Transfer {
@@ -139,265 +131,274 @@ pub mod advanced_ico_program {
             },
         );
         anchor_lang::system_program::transfer(transfer_context, total_cost)?;
-
+ 
+        // Initialize purchase account
         let purchase = &mut ctx.accounts.purchase_account;
         purchase.buyer = ctx.accounts.buyer.key();
-        purchase.amount = purchase
-            .amount
-            .checked_add(amount)
-            .ok_or(IcoError::MathOverflow)?;
+        purchase.amount = amount;
         purchase.is_distributed = false;
-
+        purchase.timestamp = current_time;
+        purchase.ico = ico.key();
+        ico.purchase_counter = ico
+            .purchase_counter
+            .checked_add(1)
+            .ok_or(IcoError::MathOverflow)?;
+ 
+        // Update ICO stats
         ico.tokens_sold = ico
             .tokens_sold
             .checked_add(amount)
             .ok_or(IcoError::MathOverflow)?;
-
+ 
+        ico.total_investors = ico
+            .total_investors
+            .checked_add(1)
+            .ok_or(IcoError::MathOverflow)?;
+ 
         emit!(TokenPurchaseEvent {
             buyer: ctx.accounts.buyer.key(),
             amount,
             price: ico.token_price,
-            round_type: ico.round_type.clone(),
+            timestamp: current_time,
         });
-
+ 
         Ok(())
     }
-
-    // Distribute tokens to buyers
+ 
     pub fn distribute_tokens(ctx: Context<DistributeTokens>) -> Result<()> {
-        let ico = &mut ctx.accounts.ico_account;
-
-        require!(!ico.is_active, IcoError::IcoStillActive);
-        require!(ico.tokens_sold > 0, IcoError::InsufficientTokens);
-
-        require!(
-            ctx.accounts.authority.key() == ico.authority,
-            IcoError::Unauthorized
-        );
-
-        let transfer_context = CpiContext::new(
+        let ico = &ctx.accounts.ico_account;
+        let purchase = &mut ctx.accounts.purchase_account;
+ 
+        require!(!purchase.is_distributed, IcoError::AlreadyDistributed);
+        // require!(!ico.is_active, IcoError::IcoStillActive);
+ 
+        // Transfer tokens
+        let transfer_ctx = CpiContext::new(
             ctx.accounts.token_program.to_account_info(),
-            Transfer {
+            token::Transfer {
                 from: ctx.accounts.treasury_token_account.to_account_info(),
                 to: ctx.accounts.buyer_token_account.to_account_info(),
                 authority: ctx.accounts.authority.to_account_info(),
             },
         );
-
-        token::transfer(transfer_context, ctx.accounts.purchase_account.amount)?;
-
-        let purchase = &mut ctx.accounts.purchase_account;
+ 
+        token::transfer(transfer_ctx, purchase.amount)?;
+ 
+        // Mark as distributed
         purchase.is_distributed = true;
-
+ 
         emit!(PurchaseEvent {
             buyer: purchase.buyer,
             amount: purchase.amount,
             is_distributed: true,
-        });
-
+        });/*  */
+ 
         Ok(())
     }
-
-    // End the ICO
+ 
     pub fn end_ico(ctx: Context<EndIco>) -> Result<()> {
         let ico = &mut ctx.accounts.ico_account;
         let current_time = Clock::get()?.unix_timestamp;
-
         require!(
             current_time >= ico.start_time + ico.duration,
             IcoError::IcoStillActive
         );
-
         ico.is_active = false;
         Ok(())
     }
-
-    // Get seed investors (utility function)
+ 
     pub fn get_seed_investors(ctx: Context<GetSeedInvestors>) -> Result<()> {
         let ico = &ctx.accounts.ico_account;
         msg!("Number of seed investors: {}", ico.seed_investors.len());
         for (index, investor) in ico.seed_investors.iter().enumerate() {
             msg!("Seed Investor {}: {}", index + 1, investor);
         }
-
         Ok(())
     }
 }
-// Fundraising Round Types
+ 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, PartialEq)]
 pub enum RoundType {
     SeedRound,
     PreICO,
     PublicICO,
 }
-
+ 
 impl Default for RoundType {
     fn default() -> Self {
         RoundType::SeedRound
     }
 }
-
-// Events
+ 
 #[event]
 pub struct TokenPurchaseEvent {
     pub buyer: Pubkey,
     pub amount: u64,
     pub price: u64,
-    pub round_type: RoundType,
+    pub timestamp: i64,
 }
-
+ 
 #[event]
 pub struct PurchaseEvent {
     pub buyer: Pubkey,
     pub amount: u64,
     pub is_distributed: bool,
 }
-
-// Purchase Account
-#[account]
-#[derive(Default)]
-pub struct PurchaseAccount {
-    pub buyer: Pubkey,
-    pub amount: u64,
-    pub is_distributed: bool,
-}
-
-// ICO Account
+ 
 #[account]
 #[derive(Default)]
 pub struct IcoAccount {
-    pub authority: Pubkey,
-    pub token_mint: Pubkey,
-    pub total_supply: u64,
-    pub token_price: u64,
-    pub tokens_sold: u64,
-    pub start_time: i64,
-    pub duration: i64,
-    pub is_active: bool,
-    pub round_type: RoundType,
-    pub seed_investors: Vec<Pubkey>,
+    pub authority: Pubkey,           // 32
+    pub token_mint: Pubkey,          // 32
+    pub total_supply: u64,           // 8
+    pub token_price: u64,            // 8
+    pub tokens_sold: u64,            // 8
+    pub start_time: i64,             // 8
+    pub duration: i64,               // 8
+    pub is_active: bool,             // 1
+    pub round_type: RoundType,       // 1
+    pub seed_investors: Vec<Pubkey>, // 4 + (32 * n)
+    pub total_investors: u64,        // 8
+    pub purchase_counter: u64,
 }
-
-// Account Structs
+ 
+#[account]
+pub struct PurchaseAccount {
+    pub buyer: Pubkey,        // 32
+    pub amount: u64,          // 8
+    pub is_distributed: bool, // 1
+    pub timestamp: i64,       // 8
+    pub ico: Pubkey,          // 32 (reference to parent ICO)
+}
+ 
 #[derive(Accounts)]
 pub struct Initialize<'info> {
     #[account(mut)]
     pub authority: Signer<'info>,
+ 
     #[account(
-        init, 
-        payer = authority, 
-        space = 8 + 32 + 2 + 8 + 6 + 1 + 1 + 4 + (32 * 100),
+        init,
+        payer = authority,
+        space = 8 +    // discriminator
+            32 +       // authority
+            32 +       // token_mint
+            8 +        // total_supply
+            8 +        // token_price
+            8 +        // tokens_sold
+            8 +        // start_time
+            8 +        // duration
+            1 +        // is_active
+            1 +        // round_type
+            4 + (32 * 100) + // seed_investors vector with max 100 investors
+            8 +
+            8,         // total_investors
         seeds = [b"ico"],
         bump
     )]
     pub ico_account: Account<'info, IcoAccount>,
+ 
     #[account(mut)]
     pub token_mint: Account<'info, Mint>,
     pub system_program: Program<'info, System>,
 }
-
-#[derive(Accounts)]
-pub struct UpdateIcoParameters<'info> {
-    #[account(mut)]
-    pub authority: Signer<'info>,
-    #[account(
-        mut,
-        seeds = [b"ico"],
-        bump
-    )]
-    pub ico_account: Account<'info, IcoAccount>,
-}
-
+ 
 #[derive(Accounts)]
 pub struct BuyTokens<'info> {
     #[account(mut)]
     pub buyer: Signer<'info>,
-    #[account(
-        mut,
-        seeds = [b"ico"],
-        bump
-    )]
+ 
+    #[account(mut, seeds = [b"ico"], bump)]
     pub ico_account: Account<'info, IcoAccount>,
+ 
     #[account(
-        init_if_needed,
-        payer = buyer, 
-        space = 8 + 32 + 8 + 1,
-        seeds = [b"purchase", buyer.key().as_ref()],
+        init,
+        payer = buyer,
+        space = 8 + 32 + 8 + 1 + 8 + 32, // discriminator + fields
+        seeds = [b"purchase",buyer.key().as_ref(),&ico_account.purchase_counter.to_le_bytes()],
         bump
     )]
     pub purchase_account: Account<'info, PurchaseAccount>,
+ 
     #[account(mut)]
     pub treasury_wallet: SystemAccount<'info>,
+ 
     pub token_program: Program<'info, token::Token>,
     pub system_program: Program<'info, System>,
 }
-
+ 
 #[derive(Accounts)]
 pub struct DistributeTokens<'info> {
     #[account(mut)]
     pub authority: Signer<'info>,
+ 
     #[account(
         mut,
         seeds = [b"ico"],
-        bump
+        bump,
+        has_one = authority
     )]
     pub ico_account: Account<'info, IcoAccount>,
-    #[account(mut)]
-    pub treasury_token_account: Account<'info, TokenAccount>,
-    #[account(mut)]
-    pub buyer_token_account: Account<'info, TokenAccount>,
+ 
     #[account(
         mut,
-        seeds = [b"purchase", purchase_account.buyer.as_ref()],
-        bump
+        seeds = [b"purchase",  purchase_account.buyer.as_ref()],
+        bump,
+        constraint = !purchase_account.is_distributed @ IcoError::AlreadyDistributed,
+        constraint = purchase_account.ico == ico_account.key() @ IcoError::InvalidPurchase
     )]
     pub purchase_account: Account<'info, PurchaseAccount>,
-    pub token_program: Program<'info, token::Token>,
-}
-
-#[derive(Accounts)]
-pub struct EndIco<'info> {
+ 
     #[account(
         mut,
-        seeds = [b"ico"],
-        bump
+        constraint = treasury_token_account.owner == authority.key() @ IcoError::Unauthorized,
+        constraint = treasury_token_account.mint == ico_account.token_mint @ IcoError::InvalidTokenMint
     )]
+    pub treasury_token_account: Account<'info, TokenAccount>,
+ 
+    #[account(mut)]
+    /// CHECK: Account checked in token transfer
+    pub buyer_token_account: UncheckedAccount<'info>,
+ 
+    pub token_program: Program<'info, token::Token>,
+    pub system_program: Program<'info, System>,
+}
+ 
+#[derive(Accounts)]
+pub struct UpdateIcoParameters<'info> {
+    #[account(mut)]
+    pub authority: Signer<'info>,
+    #[account(mut, seeds = [b"ico"], bump)]
     pub ico_account: Account<'info, IcoAccount>,
 }
-
+ 
+#[derive(Accounts)]
+pub struct EndIco<'info> {
+    #[account(mut, seeds = [b"ico"], bump)]
+    pub ico_account: Account<'info, IcoAccount>,
+}
+ 
 #[derive(Accounts)]
 pub struct AddSeedInvestor<'info> {
     #[account(mut)]
     pub authority: Signer<'info>,
-    #[account(
-        mut,
-        seeds = [b"ico"],
-        bump
-    )]
+    #[account(mut, seeds = [b"ico"], bump)]
     pub ico_account: Account<'info, IcoAccount>,
 }
-
+ 
 #[derive(Accounts)]
 pub struct RemoveSeedInvestor<'info> {
     #[account(mut)]
     pub authority: Signer<'info>,
-    #[account(
-        mut,
-        seeds = [b"ico"],
-        bump
-    )]
+    #[account(mut, seeds = [b"ico"], bump)]
     pub ico_account: Account<'info, IcoAccount>,
 }
-
+ 
 #[derive(Accounts)]
 pub struct GetSeedInvestors<'info> {
-    #[account(
-        seeds = [b"ico"],
-        bump
-    )]
+    #[account(seeds = [b"ico"], bump)]
     pub ico_account: Account<'info, IcoAccount>,
 }
-// Error Handling
+ 
 #[error_code]
 pub enum IcoError {
     #[msg("ICO is not currently active")]
@@ -408,15 +409,983 @@ pub enum IcoError {
     IcoStillActive,
     #[msg("You are not authorized to perform this action")]
     Unauthorized,
-    #[msg("Purchase account not found")]
-    PurchaseAccountNotFound,
-    #[msg("Buyer token account not found")]
-    BuyerTokenAccountNotFound,
+    #[msg("Purchase not found")]
+    PurchaseNotFound,
     #[msg("Mathematical overflow occurred")]
     MathOverflow,
     #[msg("Investor is not whitelisted for the seed round")]
     NotWhitelisted,
+    #[msg("Tokens already distributed for this purchase")]
+    AlreadyDistributed,
+    #[msg("Invalid purchase account")]
+    InvalidPurchase,
+    #[msg("Invalid token mint")]
+    InvalidTokenMint,
+    #[msg("Investor is already in the seed investors list")]
+    InvestorAlreadyExists,
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// use anchor_lang::prelude::*;
+// use anchor_spl::associated_token::AssociatedToken;
+// use anchor_spl::{
+//     associated_token::get_associated_token_address,
+//     token::{self, Mint, TokenAccount},
+// };
+
+// declare_id!("56TcuGYiK1kU1iTr1XLCYV6a4PYT8o4rqzmqvQHdEFNE");
+
+// #[program]
+// pub mod advanced_ico_program {
+//     use super::*;
+
+//     pub fn initialize(
+//         ctx: Context<Initialize>,
+//         total_supply: u64,
+//         token_price: u64,
+//         start_time: i64,
+//         duration: i64,
+//         round_type: RoundType,
+//     ) -> Result<()> {
+//         let ico = &mut ctx.accounts.ico_account;
+//         ico.authority = ctx.accounts.authority.key();
+//         ico.token_mint = ctx.accounts.token_mint.key();
+//         ico.total_supply = total_supply;
+//         ico.token_price = token_price;
+//         ico.start_time = start_time;
+//         ico.duration = duration;
+//         ico.tokens_sold = 0;
+//         ico.is_active = true;
+//         ico.round_type = round_type;
+//         ico.seed_investors = Vec::new();
+//         ico.total_investors = 0;
+//         Ok(())
+//     }
+
+//     pub fn add_seed_investor(ctx: Context<AddSeedInvestor>, investor: Pubkey) -> Result<()> {
+//         let ico = &mut ctx.accounts.ico_account;
+//         require!(
+//             ctx.accounts.authority.key() == ico.authority,
+//             IcoError::Unauthorized
+//         );
+//         require!(
+//             !ico.seed_investors.contains(&investor),
+//             IcoError::InvestorAlreadyExists
+//         );
+
+//         ico.seed_investors.push(investor);
+//         Ok(())
+//     }
+
+//     pub fn remove_seed_investor(ctx: Context<RemoveSeedInvestor>, investor: Pubkey) -> Result<()> {
+//         let ico = &mut ctx.accounts.ico_account;
+//         require!(
+//             ctx.accounts.authority.key() == ico.authority,
+//             IcoError::Unauthorized
+//         );
+//         if let Some(index) = ico.seed_investors.iter().position(|&x| x == investor) {
+//             ico.seed_investors.remove(index);
+//         }
+//         Ok(())
+//     }
+
+//     pub fn update_ico_parameters(
+//         ctx: Context<UpdateIcoParameters>,
+//         total_supply: Option<u64>,
+//         token_price: Option<u64>,
+//         start_time: Option<i64>,
+//         duration: Option<i64>,
+//         round_type: Option<RoundType>,
+//     ) -> Result<()> {
+//         let ico = &mut ctx.accounts.ico_account;
+//         require!(
+//             ctx.accounts.authority.key() == ico.authority,
+//             IcoError::Unauthorized
+//         );
+
+//         if let Some(supply) = total_supply {
+//             ico.total_supply = supply;
+//         }
+//         if let Some(price) = token_price {
+//             ico.token_price = price;
+//         }
+//         if let Some(start) = start_time {
+//             ico.start_time = start;
+//         }
+//         if let Some(dur) = duration {
+//             ico.duration = dur;
+//         }
+//         if let Some(round) = round_type {
+//             ico.round_type = round;
+//         }
+//         Ok(())
+//     }
+
+//     pub fn buy_tokens(ctx: Context<BuyTokens>, amount: u64) -> Result<()> {
+//         let current_time = Clock::get()?.unix_timestamp;
+//         let ico = &mut ctx.accounts.ico_account;
+
+//         require!(
+//             ico.is_active
+//                 && current_time >= ico.start_time
+//                 && current_time < ico.start_time + ico.duration,
+//             IcoError::IcoNotActive
+//         );
+
+//         if ico.round_type == RoundType::SeedRound {
+//             require!(
+//                 ico.seed_investors.contains(&ctx.accounts.buyer.key()),
+//                 IcoError::NotWhitelisted
+//             );
+//         }
+
+//         require!(
+//             ico.tokens_sold + amount <= ico.total_supply,
+//             IcoError::InsufficientTokens
+//         );
+
+//         let total_cost = amount
+//             .checked_mul(ico.token_price)
+//             .ok_or(IcoError::MathOverflow)?;
+
+//         // Transfer payment
+//         let transfer_context = CpiContext::new(
+//             ctx.accounts.system_program.to_account_info(),
+//             anchor_lang::system_program::Transfer {
+//                 from: ctx.accounts.buyer.to_account_info(),
+//                 to: ctx.accounts.treasury_wallet.to_account_info(),
+//             },
+//         );
+//         anchor_lang::system_program::transfer(transfer_context, total_cost)?;
+
+//         // Initialize purchase account
+//         let purchase = &mut ctx.accounts.purchase_account;
+//         purchase.buyer = ctx.accounts.buyer.key();
+//         purchase.amount = amount;
+//         purchase.is_distributed = false;
+//         purchase.timestamp = current_time;
+//         purchase.ico = ico.key();
+
+//         // Update ICO stats
+//         ico.tokens_sold = ico
+//             .tokens_sold
+//             .checked_add(amount)
+//             .ok_or(IcoError::MathOverflow)?;
+
+//         ico.total_investors = ico
+//             .total_investors
+//             .checked_add(1)
+//             .ok_or(IcoError::MathOverflow)?;
+
+//         emit!(TokenPurchaseEvent {
+//             buyer: ctx.accounts.buyer.key(),
+//             amount,
+//             price: ico.token_price,
+//             timestamp: current_time,
+//         });
+
+//         Ok(())
+//     }
+
+//     pub fn distribute_tokens(ctx: Context<DistributeTokens>) -> Result<()> {
+//         let ico = &ctx.accounts.ico_account;
+//         let purchase = &mut ctx.accounts.purchase_account;
+
+//         require!(!purchase.is_distributed, IcoError::AlreadyDistributed);
+//         // require!(!ico.is_active, IcoError::IcoStillActive);
+
+//         // Transfer tokens
+//         let transfer_ctx = CpiContext::new(
+//             ctx.accounts.token_program.to_account_info(),
+//             token::Transfer {
+//                 from: ctx.accounts.treasury_token_account.to_account_info(),
+//                 to: ctx.accounts.buyer_token_account.to_account_info(),
+//                 authority: ctx.accounts.authority.to_account_info(),
+//             },
+//         );
+
+//         token::transfer(transfer_ctx, purchase.amount)?;
+
+//         // Mark as distributed
+//         purchase.is_distributed = true;
+
+//         emit!(PurchaseEvent {
+//             buyer: purchase.buyer,
+//             amount: purchase.amount,
+//             is_distributed: true,
+//         });
+
+//         Ok(())
+//     }
+
+//     pub fn end_ico(ctx: Context<EndIco>) -> Result<()> {
+//         let ico = &mut ctx.accounts.ico_account;
+//         let current_time = Clock::get()?.unix_timestamp;
+//         require!(
+//             current_time >= ico.start_time + ico.duration,
+//             IcoError::IcoStillActive
+//         );
+//         ico.is_active = false;
+//         Ok(())
+//     }
+
+//     pub fn get_seed_investors(ctx: Context<GetSeedInvestors>) -> Result<()> {
+//         let ico = &ctx.accounts.ico_account;
+//         msg!("Number of seed investors: {}", ico.seed_investors.len());
+//         for (index, investor) in ico.seed_investors.iter().enumerate() {
+//             msg!("Seed Investor {}: {}", index + 1, investor);
+//         }
+//         Ok(())
+//     }
+// }
+
+// #[derive(AnchorSerialize, AnchorDeserialize, Clone, PartialEq)]
+// pub enum RoundType {
+//     SeedRound,
+//     PreICO,
+//     PublicICO,
+// }
+
+// impl Default for RoundType {
+//     fn default() -> Self {
+//         RoundType::SeedRound
+//     }
+// }
+
+// #[event]
+// pub struct TokenPurchaseEvent {
+//     pub buyer: Pubkey,
+//     pub amount: u64,
+//     pub price: u64,
+//     pub timestamp: i64,
+// }
+
+// #[event]
+// pub struct PurchaseEvent {
+//     pub buyer: Pubkey,
+//     pub amount: u64,
+//     pub is_distributed: bool,
+// }
+
+// #[account]
+// #[derive(Default)]
+// pub struct IcoAccount {
+//     pub authority: Pubkey,           // 32
+//     pub token_mint: Pubkey,          // 32
+//     pub total_supply: u64,           // 8
+//     pub token_price: u64,            // 8
+//     pub tokens_sold: u64,            // 8
+//     pub start_time: i64,             // 8
+//     pub duration: i64,               // 8
+//     pub is_active: bool,             // 1
+//     pub round_type: RoundType,       // 1
+//     pub seed_investors: Vec<Pubkey>, // 4 + (32 * n)
+//     pub total_investors: u64,        // 8
+// }
+
+// #[account]
+// pub struct PurchaseAccount {
+//     pub buyer: Pubkey,        // 32
+//     pub amount: u64,          // 8
+//     pub is_distributed: bool, // 1
+//     pub timestamp: i64,       // 8
+//     pub ico: Pubkey,          // 32 (reference to parent ICO)
+// }
+
+// #[derive(Accounts)]
+// pub struct Initialize<'info> {
+//     #[account(mut)]
+//     pub authority: Signer<'info>,
+
+//     #[account(
+//         init,
+//         payer = authority,
+//         space = 8 +    // discriminator
+//             32 +       // authority
+//             32 +       // token_mint
+//             8 +        // total_supply
+//             8 +        // token_price
+//             8 +        // tokens_sold
+//             8 +        // start_time
+//             8 +        // duration
+//             1 +        // is_active
+//             1 +        // round_type
+//             4 + (32 * 100) + // seed_investors vector with max 100 investors
+//             8,         // total_investors
+//         seeds = [b"ico"],
+//         bump
+//     )]
+//     pub ico_account: Account<'info, IcoAccount>,
+
+//     #[account(mut)]
+//     pub token_mint: Account<'info, Mint>,
+//     pub system_program: Program<'info, System>,
+// }
+
+// #[derive(Accounts)]
+// pub struct BuyTokens<'info> {
+//     #[account(mut)]
+//     pub buyer: Signer<'info>,
+
+//     #[account(mut, seeds = [b"ico"], bump)]
+//     pub ico_account: Account<'info, IcoAccount>,
+
+//     #[account(
+//         init,
+//         payer = buyer,
+//         space = 8 + 32 + 8 + 1 + 8 + 32, // discriminator + fields
+//         seeds = [b"purchase",buyer.key().as_ref()],
+//         bump
+//     )]
+//     pub purchase_account: Account<'info, PurchaseAccount>,
+
+//     #[account(mut)]
+//     pub treasury_wallet: SystemAccount<'info>,
+
+//     pub token_program: Program<'info, token::Token>,
+//     pub system_program: Program<'info, System>,
+// }
+
+// #[derive(Accounts)]
+// pub struct DistributeTokens<'info> {
+//     #[account(mut)]
+//     pub authority: Signer<'info>,
+
+//     #[account(
+//         mut,
+//         seeds = [b"ico"],
+//         bump,
+//         has_one = authority
+//     )]
+//     pub ico_account: Account<'info, IcoAccount>,
+
+//     #[account(
+//         mut,
+//         seeds = [b"purchase",  purchase_account.buyer.as_ref()],
+//         bump,
+//         constraint = !purchase_account.is_distributed @ IcoError::AlreadyDistributed,
+//         constraint = purchase_account.ico == ico_account.key() @ IcoError::InvalidPurchase
+//     )]
+//     pub purchase_account: Account<'info, PurchaseAccount>,
+
+//     #[account(
+//         mut,
+//         constraint = treasury_token_account.owner == authority.key() @ IcoError::Unauthorized,
+//         constraint = treasury_token_account.mint == ico_account.token_mint @ IcoError::InvalidTokenMint
+//     )]
+//     pub treasury_token_account: Account<'info, TokenAccount>,
+
+//     #[account(mut)]
+//     /// CHECK: Account checked in token transfer
+//     pub buyer_token_account: UncheckedAccount<'info>,
+
+//     pub token_program: Program<'info, token::Token>,
+//     pub system_program: Program<'info, System>,
+// }
+
+// #[derive(Accounts)]
+// pub struct UpdateIcoParameters<'info> {
+//     #[account(mut)]
+//     pub authority: Signer<'info>,
+//     #[account(mut, seeds = [b"ico"], bump)]
+//     pub ico_account: Account<'info, IcoAccount>,
+// }
+
+// #[derive(Accounts)]
+// pub struct EndIco<'info> {
+//     #[account(mut, seeds = [b"ico"], bump)]
+//     pub ico_account: Account<'info, IcoAccount>,
+// }
+
+// #[derive(Accounts)]
+// pub struct AddSeedInvestor<'info> {
+//     #[account(mut)]
+//     pub authority: Signer<'info>,
+//     #[account(mut, seeds = [b"ico"], bump)]
+//     pub ico_account: Account<'info, IcoAccount>,
+// }
+
+// #[derive(Accounts)]
+// pub struct RemoveSeedInvestor<'info> {
+//     #[account(mut)]
+//     pub authority: Signer<'info>,
+//     #[account(mut, seeds = [b"ico"], bump)]
+//     pub ico_account: Account<'info, IcoAccount>,
+// }
+
+// #[derive(Accounts)]
+// pub struct GetSeedInvestors<'info> {
+//     #[account(seeds = [b"ico"], bump)]
+//     pub ico_account: Account<'info, IcoAccount>,
+// }
+
+// #[error_code]
+// pub enum IcoError {
+//     #[msg("ICO is not currently active")]
+//     IcoNotActive,
+//     #[msg("Insufficient tokens remaining")]
+//     InsufficientTokens,
+//     #[msg("ICO is still active")]
+//     IcoStillActive,
+//     #[msg("You are not authorized to perform this action")]
+//     Unauthorized,
+//     #[msg("Purchase not found")]
+//     PurchaseNotFound,
+//     #[msg("Mathematical overflow occurred")]
+//     MathOverflow,
+//     #[msg("Investor is not whitelisted for the seed round")]
+//     NotWhitelisted,
+//     #[msg("Tokens already distributed for this purchase")]
+//     AlreadyDistributed,
+//     #[msg("Invalid purchase account")]
+//     InvalidPurchase,
+//     #[msg("Invalid token mint")]
+//     InvalidTokenMint,
+//     #[msg("Investor is already in the seed investors list")]
+//     InvestorAlreadyExists,
+// }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// use anchor_lang::prelude::*;
+// use anchor_spl::{
+//     associated_token::AssociatedToken,
+//     token::{self, Mint, TokenAccount, Transfer},
+// };
+
+// declare_id!("56TcuGYiK1kU1iTr1XLCYV6a4PYT8o4rqzmqvQHdEFNE");
+
+// #[program]
+// pub mod advanced_ico_program {
+//     use super::*;
+
+//     // Initialize the ICO
+//     pub fn initialize(
+//         ctx: Context<Initialize>,
+//         total_supply: u64,
+//         token_price: u64,
+//         start_time: i64,
+//         duration: i64,
+//         round_type: RoundType,
+//     ) -> Result<()> {
+//         let ico = &mut ctx.accounts.ico_account;
+//         ico.authority = ctx.accounts.authority.key();
+//         ico.token_mint = ctx.accounts.token_mint.key();
+//         ico.total_supply = total_supply;
+//         ico.token_price = token_price;
+//         ico.start_time = start_time;
+//         ico.duration = duration;
+//         ico.tokens_sold = 0;
+//         ico.is_active = true;
+//         ico.round_type = round_type;
+//         ico.seed_investors = Vec::new();
+
+//         Ok(())
+//     }
+
+//     // Update ICO parameters
+//     pub fn update_ico_parameters(
+//         ctx: Context<UpdateIcoParameters>,
+//         total_supply: Option<u64>,
+//         token_price: Option<u64>,
+//         start_time: Option<i64>,
+//         duration: Option<i64>,
+//         round_type: Option<RoundType>,
+//     ) -> Result<()> {
+//         let ico = &mut ctx.accounts.ico_account;
+
+//         require!(
+//             ctx.accounts.authority.key() == ico.authority,
+//             IcoError::Unauthorized
+//         );
+
+//         if let Some(supply) = total_supply {
+//             ico.total_supply = supply;
+//         }
+
+//         if let Some(price) = token_price {
+//             ico.token_price = price;
+//         }
+
+//         if let Some(start) = start_time {
+//             ico.start_time = start;
+//         }
+
+//         if let Some(dur) = duration {
+//             ico.duration = dur;
+//         }
+
+//         if let Some(round) = round_type {
+//             ico.round_type = round;
+//         }
+
+//         Ok(())
+//     }
+
+//     // Add a seed investor to the whitelist
+//     pub fn add_seed_investor(ctx: Context<AddSeedInvestor>, investor: Pubkey) -> Result<()> {
+//         let ico = &mut ctx.accounts.ico_account;
+
+//         require!(
+//             ctx.accounts.authority.key() == ico.authority,
+//             IcoError::Unauthorized
+//         );
+
+//         ico.seed_investors.push(investor);
+
+//         Ok(())
+//     }
+
+//     // Remove a seed investor from the whitelist
+//     pub fn remove_seed_investor(ctx: Context<RemoveSeedInvestor>, investor: Pubkey) -> Result<()> {
+//         let ico = &mut ctx.accounts.ico_account;
+
+//         require!(
+//             ctx.accounts.authority.key() == ico.authority,
+//             IcoError::Unauthorized
+//         );
+
+//         if let Some(index) = ico.seed_investors.iter().position(|&x| x == investor) {
+//             ico.seed_investors.remove(index);
+//         }
+
+//         Ok(())
+//     }
+
+//     // Buy tokens during the ICO
+//     pub fn buy_tokens(ctx: Context<BuyTokens>, amount: u64) -> Result<()> {
+//         let current_time = Clock::get()?.unix_timestamp;
+//         let ico = &mut ctx.accounts.ico_account;
+
+//         require!(
+//             ico.is_active
+//                 && current_time >= ico.start_time
+//                 && current_time < ico.start_time + ico.duration,
+//             IcoError::IcoNotActive
+//         );
+
+//         if ico.round_type == RoundType::SeedRound {
+//             require!(
+//                 ico.seed_investors.contains(&ctx.accounts.buyer.key()),
+//                 IcoError::NotWhitelisted
+//             );
+//         }
+
+//         require!(
+//             ico.tokens_sold + amount <= ico.total_supply,
+//             IcoError::InsufficientTokens
+//         );
+
+//         let total_cost = amount
+//             .checked_mul(ico.token_price)
+//             .ok_or(IcoError::MathOverflow)?;
+
+//         let transfer_context = CpiContext::new(
+//             ctx.accounts.system_program.to_account_info(),
+//             anchor_lang::system_program::Transfer {
+//                 from: ctx.accounts.buyer.to_account_info(),
+//                 to: ctx.accounts.treasury_wallet.to_account_info(),
+//             },
+//         );
+//         anchor_lang::system_program::transfer(transfer_context, total_cost)?;
+
+//         let purchase = &mut ctx.accounts.purchase_account;
+//         purchase.buyer = ctx.accounts.buyer.key();
+//         purchase.amount = purchase
+//             .amount
+//             .checked_add(amount)
+//             .ok_or(IcoError::MathOverflow)?;
+//         purchase.is_distributed = false;
+
+//         ico.tokens_sold = ico
+//             .tokens_sold
+//             .checked_add(amount)
+//             .ok_or(IcoError::MathOverflow)?;
+
+//         emit!(TokenPurchaseEvent {
+//             buyer: ctx.accounts.buyer.key(),
+//             amount,
+//             price: ico.token_price,
+//             round_type: ico.round_type.clone(),
+//         });
+
+//         Ok(())
+//     }
+
+//     // Distribute tokens to buyers
+//     pub fn distribute_tokens(ctx: Context<DistributeTokens>) -> Result<()> {
+//         let ico = &mut ctx.accounts.ico_account;
+
+//         require!(!ico.is_active, IcoError::IcoStillActive);
+//         require!(ico.tokens_sold > 0, IcoError::InsufficientTokens);
+
+//         require!(
+//             ctx.accounts.authority.key() == ico.authority,
+//             IcoError::Unauthorized
+//         );
+
+//         let transfer_context = CpiContext::new(
+//             ctx.accounts.token_program.to_account_info(),
+//             Transfer {
+//                 from: ctx.accounts.treasury_token_account.to_account_info(),
+//                 to: ctx.accounts.buyer_token_account.to_account_info(),
+//                 authority: ctx.accounts.authority.to_account_info(),
+//             },
+//         );
+
+//         token::transfer(transfer_context, ctx.accounts.purchase_account.amount)?;
+
+//         let purchase = &mut ctx.accounts.purchase_account;
+//         purchase.is_distributed = true;
+
+//         emit!(PurchaseEvent {
+//             buyer: purchase.buyer,
+//             amount: purchase.amount,
+//             is_distributed: true,
+//         });
+
+//         Ok(())
+//     }
+
+//     // End the ICO
+//     pub fn end_ico(ctx: Context<EndIco>) -> Result<()> {
+//         let ico = &mut ctx.accounts.ico_account;
+//         let current_time = Clock::get()?.unix_timestamp;
+
+//         require!(
+//             current_time >= ico.start_time + ico.duration,
+//             IcoError::IcoStillActive
+//         );
+
+//         ico.is_active = false;
+//         Ok(())
+//     }
+
+//     // Get seed investors (utility function)
+//     pub fn get_seed_investors(ctx: Context<GetSeedInvestors>) -> Result<()> {
+//         let ico = &ctx.accounts.ico_account;
+//         msg!("Number of seed investors: {}", ico.seed_investors.len());
+//         for (index, investor) in ico.seed_investors.iter().enumerate() {
+//             msg!("Seed Investor {}: {}", index + 1, investor);
+//         }
+
+//         Ok(())
+//     }
+// }
+// // Fundraising Round Types
+// #[derive(AnchorSerialize, AnchorDeserialize, Clone, PartialEq)]
+// pub enum RoundType {
+//     SeedRound,
+//     PreICO,
+//     PublicICO,
+// }
+
+// impl Default for RoundType {
+//     fn default() -> Self {
+//         RoundType::SeedRound
+//     }
+// }
+
+// // Events
+// #[event]
+// pub struct TokenPurchaseEvent {
+//     pub buyer: Pubkey,
+//     pub amount: u64,
+//     pub price: u64,
+//     pub round_type: RoundType,
+// }
+
+// #[event]
+// pub struct PurchaseEvent {
+//     pub buyer: Pubkey,
+//     pub amount: u64,
+//     pub is_distributed: bool,
+// }
+
+// // Purchase Account
+// #[account]
+// #[derive(Default)]
+// pub struct PurchaseAccount {
+//     pub buyer: Pubkey,
+//     pub amount: u64,
+//     pub is_distributed: bool,
+// }
+
+// // ICO Account
+// #[account]
+// #[derive(Default)]
+// pub struct IcoAccount {
+//     pub authority: Pubkey,
+//     pub token_mint: Pubkey,
+//     pub total_supply: u64,
+//     pub token_price: u64,
+//     pub tokens_sold: u64,
+//     pub start_time: i64,
+//     pub duration: i64,
+//     pub is_active: bool,
+//     pub round_type: RoundType,
+//     pub seed_investors: Vec<Pubkey>,
+// }
+
+// // Account Structs
+// #[derive(Accounts)]
+// pub struct Initialize<'info> {
+//     #[account(mut)]
+//     pub authority: Signer<'info>,
+//     #[account(
+//         init, 
+//         payer = authority, 
+//         space = 8 + 32 + 2 + 8 + 6 + 1 + 1 + 4 + (32 * 100),
+//         seeds = [b"ico"],
+//         bump
+//     )]
+//     pub ico_account: Account<'info, IcoAccount>,
+//     #[account(mut)]
+//     pub token_mint: Account<'info, Mint>,
+//     pub system_program: Program<'info, System>,
+// }
+
+// #[derive(Accounts)]
+// pub struct UpdateIcoParameters<'info> {
+//     #[account(mut)]
+//     pub authority: Signer<'info>,
+//     #[account(
+//         mut,
+//         seeds = [b"ico"],
+//         bump
+//     )]
+//     pub ico_account: Account<'info, IcoAccount>,
+// }
+
+// #[derive(Accounts)]
+// pub struct BuyTokens<'info> {
+//     #[account(mut)]
+//     pub buyer: Signer<'info>,
+//     #[account(
+//         mut,
+//         seeds = [b"ico"],
+//         bump
+//     )]
+//     pub ico_account: Account<'info, IcoAccount>,
+//     #[account(
+//         init_if_needed,
+//         payer = buyer, 
+//         space = 8 + 32 + 8 + 1,
+//         seeds = [b"purchase", buyer.key().as_ref()],
+//         bump
+//     )]
+//     pub purchase_account: Account<'info, PurchaseAccount>,
+//     #[account(mut)]
+//     pub treasury_wallet: SystemAccount<'info>,
+//     pub token_program: Program<'info, token::Token>,
+//     pub system_program: Program<'info, System>,
+// }
+
+// #[derive(Accounts)]
+// pub struct DistributeTokens<'info> {
+//     #[account(mut)]
+//     pub authority: Signer<'info>,
+//     #[account(
+//         mut,
+//         seeds = [b"ico"],
+//         bump
+//     )]
+//     pub ico_account: Account<'info, IcoAccount>,
+//     #[account(mut)]
+//     pub treasury_token_account: Account<'info, TokenAccount>,
+//     #[account(mut)]
+//     pub buyer_token_account: Account<'info, TokenAccount>,
+//     #[account(
+//         mut,
+//         seeds = [b"purchase", purchase_account.buyer.as_ref()],
+//         bump
+//     )]
+//     pub purchase_account: Account<'info, PurchaseAccount>,
+//     pub token_program: Program<'info, token::Token>,
+// }
+
+// #[derive(Accounts)]
+// pub struct EndIco<'info> {
+//     #[account(
+//         mut,
+//         seeds = [b"ico"],
+//         bump
+//     )]
+//     pub ico_account: Account<'info, IcoAccount>,
+// }
+
+// #[derive(Accounts)]
+// pub struct AddSeedInvestor<'info> {
+//     #[account(mut)]
+//     pub authority: Signer<'info>,
+//     #[account(
+//         mut,
+//         seeds = [b"ico"],
+//         bump
+//     )]
+//     pub ico_account: Account<'info, IcoAccount>,
+// }
+
+// #[derive(Accounts)]
+// pub struct RemoveSeedInvestor<'info> {
+//     #[account(mut)]
+//     pub authority: Signer<'info>,
+//     #[account(
+//         mut,
+//         seeds = [b"ico"],
+//         bump
+//     )]
+//     pub ico_account: Account<'info, IcoAccount>,
+// }
+
+// #[derive(Accounts)]
+// pub struct GetSeedInvestors<'info> {
+//     #[account(
+//         seeds = [b"ico"],
+//         bump
+//     )]
+//     pub ico_account: Account<'info, IcoAccount>,
+// }
+// // Error Handling
+// #[error_code]
+// pub enum IcoError {
+//     #[msg("ICO is not currently active")]
+//     IcoNotActive,
+//     #[msg("Insufficient tokens remaining")]
+//     InsufficientTokens,
+//     #[msg("ICO is still active")]
+//     IcoStillActive,
+//     #[msg("You are not authorized to perform this action")]
+//     Unauthorized,
+//     #[msg("Purchase account not found")]
+//     PurchaseAccountNotFound,
+//     #[msg("Buyer token account not found")]
+//     BuyerTokenAccountNotFound,
+//     #[msg("Mathematical overflow occurred")]
+//     MathOverflow,
+//     #[msg("Investor is not whitelisted for the seed round")]
+//     NotWhitelisted,
+// }
 
 
 

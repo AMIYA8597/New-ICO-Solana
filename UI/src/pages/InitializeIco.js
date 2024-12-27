@@ -4,6 +4,12 @@ import { PublicKey } from '@solana/web3.js';
 import { getProgram } from '../utils/anchor-connection';
 import * as anchor from '@project-serum/anchor';
 
+import { Buffer } from "buffer";
+
+Buffer.from("anything", "base64");
+window.Buffer = window.Buffer || require("buffer").Buffer;
+
+
 const InitializeIco = () => {
   const { connection } = useConnection();
   const wallet = useWallet();

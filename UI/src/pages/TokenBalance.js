@@ -6,8 +6,14 @@ import {
   getAssociatedTokenAddress,
   getAccount,
 } from '@solana/spl-token';
-import { formatLamports } from '../utils/formatters';
+import { formatSol } from '../utils/formatters';
 import { getProgram } from '../utils/anchor-connection';
+
+import { Buffer } from "buffer";
+
+Buffer.from("anything", "base64");
+window.Buffer = window.Buffer || require("buffer").Buffer;
+
 
 const TokenBalance = () => {
   const { connection } = useConnection();
@@ -64,7 +70,7 @@ const TokenBalance = () => {
 
   if (loading) return (
     <div className="flex justify-center items-center h-64">
-      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500"></div>
+      <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"></div>
     </div>
   );
 
@@ -83,11 +89,11 @@ const TokenBalance = () => {
           <div className="space-y-4">
             <div className="bg-indigo-100 rounded-lg p-4">
               <p className="text-sm font-medium text-indigo-600">Current Balance:</p>
-              <p className="text-3xl font-bold text-indigo-800">{formatLamports(balance)} tokens</p>
+              <p className="text-3xl font-bold text-indigo-800">{formatSol(balance)} SOL</p>
             </div>
             <div className="bg-green-100 rounded-lg p-4">
               <p className="text-sm font-medium text-green-600">Total Purchased:</p>
-              <p className="text-3xl font-bold text-green-800">{formatLamports(purchaseAmount)} tokens</p>
+              <p className="text-3xl font-bold text-green-800">{formatSol(purchaseAmount)} SOL</p>
             </div>
           </div>
         </div>
@@ -105,3 +111,4 @@ const TokenBalance = () => {
 };
 
 export default TokenBalance;
+

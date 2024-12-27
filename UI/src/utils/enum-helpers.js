@@ -23,3 +23,4 @@ export const getRoundTypeString = (roundType) => {
   if (roundType.publicIco) return 'PublicICO';
   return 'Unknown';
 };
+

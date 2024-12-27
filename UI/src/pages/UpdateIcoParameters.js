@@ -4,7 +4,12 @@ import { PublicKey } from '@solana/web3.js';
 import { getProgram } from '../utils/anchor-connection';
 import * as anchor from '@project-serum/anchor';
 import { getRoundTypeFromString, getRoundTypeString } from '../utils/enum-helpers';
-import { formatUnixTimestamp } from '../utils/formatters';
+import { formatUnixTimestamp, formatSol } from '../utils/formatters';
+
+import { Buffer } from "buffer";
+
+Buffer.from("anything", "base64");
+window.Buffer = window.Buffer || require("buffer").Buffer;
 
 const UpdateIcoParameters = () => {
   const { connection } = useConnection();
@@ -100,8 +105,8 @@ const UpdateIcoParameters = () => {
           {currentParameters && (
             <div className="mb-6 p-4 bg-gray-100 rounded-lg">
               <h3 className="text-lg font-semibold mb-2">Current Parameters:</h3>
-              <p><strong>Total Supply:</strong> {currentParameters.totalSupply.toString()}</p>
-              <p><strong>Token Price:</strong> {currentParameters.tokenPrice.toString()} lamports</p>
+              <p><strong>Total Supply:</strong> {formatSol(currentParameters.totalSupply)} SOL</p>
+              <p><strong>Token Price:</strong> {formatSol(currentParameters.tokenPrice)} SOL</p>
               <p><strong>Start Time:</strong> {formatUnixTimestamp(currentParameters.startTime)}</p>
               <p><strong>Duration:</strong> {currentParameters.duration.toString()} seconds</p>
               <p><strong>Round Type:</strong> {getRoundTypeString(currentParameters.roundType)}</p>
@@ -110,7 +115,7 @@ const UpdateIcoParameters = () => {
           <form onSubmit={handleUpdateParameters} className="space-y-4">
             <div>
               <label htmlFor="totalSupply" className="block text-sm font-medium text-gray-700">
-                Total Supply:
+                Total Supply (in SOL):
               </label>
               <input
                 type="text"
@@ -118,12 +123,12 @@ const UpdateIcoParameters = () => {
                 value={totalSupply}
                 onChange={(e) => setTotalSupply(e.target.value)}
                 placeholder="Leave blank to keep current value"
-                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-purple-500 focus:border-purple-500 sm:text-sm"
+                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
               />
             </div>
             <div>
               <label htmlFor="tokenPrice" className="block text-sm font-medium text-gray-700">
-                Token Price (in lamports):
+                Token Price (in SOL):
               </label>
               <input
                 type="text"
@@ -131,7 +136,7 @@ const UpdateIcoParameters = () => {
                 value={tokenPrice}
                 onChange={(e) => setTokenPrice(e.target.value)}
                 placeholder="Leave blank to keep current value"
-                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-purple-500 focus:border-purple-500 sm:text-sm"
+                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
               />
             </div>
             <div>
@@ -143,7 +148,7 @@ const UpdateIcoParameters = () => {
                 id="startTime"
                 value={startTime}
                 onChange={(e) => setStartTime(e.target.value)}
-                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-purple-500 focus:border-purple-500 sm:text-sm"
+                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
               />
             </div>
             <div>
@@ -156,7 +161,7 @@ const UpdateIcoParameters = () => {
                 value={duration}
                 onChange={(e) => setDuration(e.target.value)}
                 placeholder="Leave blank to keep current value"
-                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-purple-500 focus:border-purple-500 sm:text-sm"
+                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
               />
             </div>
             <div>
@@ -167,7 +172,7 @@ const UpdateIcoParameters = () => {
                 id="roundType"
                 value={roundType}
                 onChange={(e) => setRoundType(e.target.value)}
-                className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-purple-500 focus:border-purple-500 sm:text-sm rounded-md"
+                className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
               >
                 <option value="">Select to change round type</option>
                 <option value="SeedRound">Seed Round</option>
@@ -200,6 +205,10 @@ const UpdateIcoParameters = () => {
 };
 
 export default UpdateIcoParameters;
+
+
+
+
 
 
 
@@ -492,6 +501,231 @@ export default UpdateIcoParameters;
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// import React, { useState, useEffect } from 'react';
+// import { useConnection, useWallet } from '@solana/wallet-adapter-react';
+// import { PublicKey } from '@solana/web3.js';
+// import { getProgram } from '../utils/anchor-connection';
+// import { lamportsToSol, solToLamports } from '../utils/formatters';
+// import { updateIcoParameters } from '../utils/ico-instructions';
+
+// import { Buffer } from "buffer";
+
+// Buffer.from("anything", "base64");
+// window.Buffer = window.Buffer || require("buffer").Buffer;
+
+
+// const UpdateIcoParameters = () => {
+//   const { connection } = useConnection();
+//   const wallet = useWallet();
+//   const [icoData, setIcoData] = useState(null);
+//   const [newParams, setNewParams] = useState({
+//     tokenPrice: '',
+//     totalSupply: '',
+//     startTime: '',
+//     duration: '',
+//     roundType: '',
+//   });
+//   const [isLoading, setIsLoading] = useState(false);
+//   const [error, setError] = useState('');
+//   const [success, setSuccess] = useState('');
+
+//   useEffect(() => {
+//     if (wallet.publicKey) {
+//       fetchIcoData();
+//     }
+//   }, [connection, wallet.publicKey]);
+
+//   const fetchIcoData = async () => {
+//     try {
+//       const program = getProgram(connection, wallet);
+//       const [icoAccount] = await PublicKey.findProgramAddress(
+//         [Buffer.from("ico")],
+//         program.programId
+//       );
+//       const data = await program.account.icoAccount.fetch(icoAccount);
+//       setIcoData(data);
+//       setNewParams({
+//         tokenPrice: lamportsToSol(data.tokenPrice).toString(),
+//         totalSupply: lamportsToSol(data.totalSupply).toString(),
+//         startTime: data.startTime.toString(),
+//         duration: data.duration.toString(),
+//         roundType: Object.keys(data.roundType)[0],
+//       });
+//     } catch (err) {
+//       console.error('Error:', err);
+//       setError('Failed to fetch ICO data');
+//     }
+//   };
+
+//   const handleSubmit = async (e) => {
+//     e.preventDefault();
+//     setIsLoading(true);
+//     setError('');
+//     setSuccess('');
+
+//     try {
+//       const updatedParams = {
+//         tokenPrice: solToLamports(parseFloat(newParams.tokenPrice)),
+//         totalSupply: solToLamports(parseFloat(newParams.totalSupply)),
+//         startTime: new anchor.BN(newParams.startTime),
+//         duration: new anchor.BN(newParams.duration),
+//         roundType: { [newParams.roundType]: {} },
+//       };
+
+//       await updateIcoParameters(connection, wallet, updatedParams);
+//       setSuccess('ICO parameters updated successfully');
+//       fetchIcoData(); // Refresh ICO data after update
+//     } catch (err) {
+//       console.error('Error:', err);
+//       setError(err.message);
+//     } finally {
+//       setIsLoading(false);
+//     }
+//   };
+
+//   const handleInputChange = (e) => {
+//     const { name, value } = e.target;
+//     setNewParams(prev => ({ ...prev, [name]: value }));
+//   };
+
+//   if (!wallet.publicKey) {
+//     return (
+//       <div className="text-center py-12">
+//         <h2 className="text-2xl font-semibold mb-4">Update ICO Parameters</h2>
+//         <p className="text-gray-600">Please connect your wallet to update ICO parameters.</p>
+//       </div>
+//     );
+//   }
+
+//   return (
+//     <div className="max-w-2xl mx-auto">
+//       <h1 className="text-3xl font-bold mb-6">Update ICO Parameters</h1>
+//       <div className="bg-white rounded-lg shadow-md p-6">
+//         <form onSubmit={handleSubmit}>
+//           <div className="grid grid-cols-1 gap-6">
+//             <div>
+//               <label htmlFor="tokenPrice" className="block text-sm font-medium text-gray-700">
+//                 Token Price (SOL)
+//               </label>
+//               <input
+//                 type="number"
+//                 id="tokenPrice"
+//                 name="tokenPrice"
+//                 value={newParams.tokenPrice}
+//                 onChange={handleInputChange}
+//                 className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
+//                 required
+//                 step="0.000000001"
+//                 min="0"
+//               />
+//             </div>
+//             <div>
+//               <label htmlFor="totalSupply" className="block text-sm font-medium text-gray-700">
+//                 Total Supply (SOL)
+//               </label>
+//               <input
+//                 type="number"
+//                 id="totalSupply"
+//                 name="totalSupply"
+//                 value={newParams.totalSupply}
+//                 onChange={handleInputChange}
+//                 className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
+//                 required
+//                 step="0.000000001"
+//                 min="0"
+//               />
+//             </div>
+//             <div>
+//               <label htmlFor="startTime" className="block text-sm font-medium text-gray-700">
+//                 Start Time (Unix Timestamp)
+//               </label>
+//               <input
+//                 type="number"
+//                 id="startTime"
+//                 name="startTime"
+//                 value={newParams.startTime}
+//                 onChange={handleInputChange}
+//                 className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
+//                 required
+//                 step="1"
+//                 min="0"
+//               />
+//             </div>
+//             <div>
+//               <label htmlFor="duration" className="block text-sm font-medium text-gray-700">
+//                 Duration (Seconds)
+//               </label>
+//               <input
+//                 type="number"
+//                 id="duration"
+//                 name="duration"
+//                 value={newParams.duration}
+//                 onChange={handleInputChange}
+//                 className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
+//                 required
+//                 step="1"
+//                 min="0"
+//               />
+//             </div>
+//             <div>
+//               <label htmlFor="roundType" className="block text-sm font-medium text-gray-700">
+//                 Round Type
+//               </label>
+//               <select
+//                 id="roundType"
+//                 name="roundType"
+//                 value={newParams.roundType}
+//                 onChange={handleInputChange}
+//                 className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
+//                 required
+//               >
+//                 <option value="SeedRound">Seed Round</option>
+//                 <option value="PreICO">Pre-ICO</option>
+//                 <option value="PublicICO">Public ICO</option>
+//               </select>
+//             </div>
+//           </div>
+//           <div className="mt-6">
+//             <button
+//               type="submit"
+//               className="w-full bg-primary-600 text-white py-2 px-4 rounded-md hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50"
+//               disabled={isLoading}
+//             >
+//               {isLoading ? 'Updating...' : 'Update Parameters'}
+//             </button>
+//           </div>
+//         </form>
+//         {error && <p className="mt-4 text-red-600">{error}</p>}
+//         {success && <p className="mt-4 text-green-600">{success}</p>}
+//       </div>
+//     </div>
+//   );
+// };
+
+// export default UpdateIcoParameters;
 
 
 

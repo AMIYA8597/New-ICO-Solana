@@ -20,70 +20,57 @@ const Sidebar = () => {
     { name: 'End ICO', href: '/end-ico', icon: 'M13 10V3L4 14h7v7l9-11h-7z' },
   ];
 
-  return (
-    <div className="bg-white w-64 min-h-screen shadow-md">
-      <div className="py-4 px-3">
-        <nav className="mt-5 space-y-2">
-          {navigation.map((item) => (
-            <Link
-              key={item.name}
-              to={item.href}
-              className={`${
-                location.pathname === item.href
-                  ? 'bg-slate-100 text-slate-900'
-                  : 'text-gray-600 hover:bg-slate-50 hover:text-slate-900'
-              } group flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors duration-150 ease-in-out`}
-            >
-              <svg
-                className={`${
-                  location.pathname === item.href ? 'text-slate-500' : 'text-gray-400 group-hover:text-slate-500'
-                } mr-3 flex-shrink-0 h-6 w-6 transition-colors duration-150 ease-in-out`}
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={item.icon} />
-              </svg>
-              {item.name}
-            </Link>
-          ))}
+  const NavItem = ({ item, isAdmin = false }) => (
+    <Link
+      to={item.href}
+      className={`${
+        location.pathname === item.href
+          ? 'bg-primary-100 text-primary-900'
+          : 'text-gray-600 hover:bg-primary-50 hover:text-primary-900'
+      } group flex items-center px-2 py-2 text-sm font-medium rounded-md transition-colors duration-150 ease-in-out`}
+    >
+      <svg
+        className={`${
+          location.pathname === item.href ? 'text-primary-500' : 'text-gray-400 group-hover:text-primary-500'
+        } mr-3 flex-shrink-0 h-6 w-6 transition-colors duration-150 ease-in-out`}
+        xmlns="http://www.w3.org/2000/svg"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+        aria-hidden="true"
+      >
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={item.icon} />
+      </svg>
+      {item.name}
+    </Link>
+  );
 
-          {isAdminWallet(publicKey) && (
-            <>
-              <div className="mt-8 mb-2 px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                ADMIN
-              </div>
-              {adminNavigation.map((item) => (
-                <Link
-                  key={item.name}
-                  to={item.href}
-                  className={`${
-                    location.pathname === item.href
-                      ? 'bg-slate-100 text-slate-900'
-                      : 'text-gray-600 hover:bg-slate-50 hover:text-slate-900'
-                  } group flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors duration-150 ease-in-out`}
-                >
-                  <svg
-                    className={`${
-                      location.pathname === item.href ? 'text-slate-500' : 'text-gray-400 group-hover:text-slate-500'
-                    } mr-3 flex-shrink-0 h-6 w-6 transition-colors duration-150 ease-in-out`}
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={item.icon} />
-                  </svg>
-                  {item.name}
-                </Link>
+  return (
+    <div className="hidden md:flex md:flex-shrink-0">
+      <div className="flex flex-col w-64">
+        <div className="flex flex-col h-0 flex-1 bg-white border-r border-gray-200">
+          <div className="flex-1 flex flex-col pt-5 pb-4 overflow-y-auto">
+            <nav className="mt-5 flex-1 px-2 bg-white space-y-1">
+              {navigation.map((item) => (
+                <NavItem key={item.name} item={item} />
               ))}
-            </>
-          )}
-        </nav>
+              {isAdminWallet(publicKey) && (
+                <>
+                  <div className="mt-8 mb-2 px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    Admin
+                  </div>
+                  {adminNavigation.map((item) => (
+                    <NavItem key={item.name} item={item} isAdmin />
+                  ))}
+                </>
+              )}
+            </nav>
+          </div>
+        </div>
       </div>
     </div>
   );
 };
 
 export default Sidebar;
+
