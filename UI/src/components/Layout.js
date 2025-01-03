@@ -1,19 +1,17 @@
 import React from 'react';
 import Navbar from './Navbar';
-import Sidebar from './Sidebar';
+import Footer from './Footer';
 
 const Layout = ({ children }) => {
   return (
-    <div className="flex h-screen bg-gray-100 font-sans">
-      <Sidebar />
-      <div className="flex flex-col flex-1 overflow-hidden">
-        <Navbar />
-        <main className="flex-1 overflow-x-hidden overflow-y-auto bg-gray-100">
-          <div className="container mx-auto px-6 py-8">
-            {children}
-          </div>
-        </main>
-      </div>
+    <div className="min-h-screen flex flex-col bg-gray-100">
+      <Navbar />
+      <main className="flex-1 p-6">
+        <div className="max-w-7xl mx-auto">
+          {children}
+        </div>
+      </main>
+      <Footer />
     </div>
   );
 };

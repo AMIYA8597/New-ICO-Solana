@@ -2,14 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { useConnection, useWallet } from '@solana/wallet-adapter-react';
 import { PublicKey } from '@solana/web3.js';
 import { getProgram } from '../utils/anchor-connection';
-import { lamportsToSol } from '../utils/formatters';
-import { endIco } from '../utils/ico-instructions';
+import { formatSol } from '../utils/formatters';
 
 const EndIco = () => {
   const { connection } = useConnection();
   const wallet = useWallet();
   const [icoData, setIcoData] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [ending, setEnding] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
@@ -20,35 +20,61 @@ const EndIco = () => {
   }, [connection, wallet.publicKey]);
 
   const fetchIcoData = async () => {
+    if (!wallet.publicKey) return;
+
+    setLoading(true);
+    setError('');
+
     try {
       const program = getProgram(connection, wallet);
       const [icoAccount] = await PublicKey.findProgramAddress(
-        [Buffer.from("ico")],
+        [Buffer.from('ico')],
         program.programId
       );
       const data = await program.account.icoAccount.fetch(icoAccount);
-      setIcoData(data);
+      setIcoData({
+        ...data,
+        tokensSold: Number(data.tokensSold),
+        totalSupply: Number(data.totalSupply),
+        tokenPrice: Number(data.tokenPrice),
+      });
     } catch (err) {
-      console.error('Error:', err);
-      setError('Failed to fetch ICO data');
+      console.error('Error fetching ICO data:', err);
+      setError('Failed to fetch ICO data. Please try again later.');
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
   const handleEndIco = async () => {
+    if (!wallet.publicKey || !wallet.signTransaction) return;
+
+    setEnding(true);
     setError('');
     setSuccess('');
-    setIsLoading(true);
+
     try {
-      await endIco(connection, wallet);
-      setSuccess('ICO ended successfully');
-      fetchIcoData(); // Refresh ICO data after ending
+      const program = getProgram(connection, wallet);
+      const [icoAccount] = await PublicKey.findProgramAddress(
+        [Buffer.from('ico')],
+        program.programId
+      );
+
+      const tx = await program.methods
+        .endIco()
+        .accounts({
+          icoAccount,
+          authority: wallet.publicKey,
+        })
+        .rpc();
+
+      setSuccess(`ICO ended successfully! Transaction ID: ${tx}`);
+      await fetchIcoData(); // Refresh ICO data
     } catch (err) {
-      console.error('Error:', err);
-      setError(err.message);
+      console.error('Error ending ICO:', err);
+      setError('Failed to end ICO. Please try again later.');
     } finally {
-      setIsLoading(false);
+      setEnding(false);
     }
   };
 
@@ -62,54 +88,61 @@ const EndIco = () => {
   }
 
   return (
-    <div className="max-w-2xl mx-auto">
-      <h1 className="text-3xl font-bold mb-6">End ICO</h1>
-      <div className="bg-white rounded-lg shadow-md p-6">
-        {isLoading ? (
+    <div className="max-w-lg mx-auto">
+      <div className="bg-white shadow-lg rounded-lg p-6">
+        <h2 className="text-2xl font-bold mb-6 text-gray-800">End ICO</h2>
+        {loading ? (
           <div className="text-center py-12">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
             <p className="mt-4 text-gray-600">Loading ICO data...</p>
+          </div>
+        ) : error ? (
+          <div className="p-4 bg-red-100 border border-red-400 text-red-700 rounded-md text-sm">
+            {error}
           </div>
         ) : (
           <>
-            <div className="mb-6">
-              <h2 className="text-xl font-semibold mb-4">ICO Status</h2>
-              <p className="text-lg">
-                Status: {' '}
-                {icoData?.isActive ? (
-                  <span className="text-green-600 font-semibold">Active</span>
-                ) : (
-                  <span className="text-red-600 font-semibold">Inactive</span>
-                )}
-              </p>
-              <p className="text-lg mt-2">
-                Tokens Sold: {lamportsToSol(icoData?.tokensSold).toFixed(4)} SOL
-              </p>
-              <p className="text-lg mt-2">
-                Total Raised: {lamportsToSol(icoData?.totalSupply).toFixed(4)} SOL
-              </p>
-            </div>
-            {icoData?.isActive && (
-              <div className="mt-6">
-                <button
-                  onClick={handleEndIco}
-                  className="w-full bg-red-600 text-white py-2 px-4 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50"
-                  disabled={isLoading}
-                >
-                  {isLoading ? 'Ending ICO...' : 'End ICO'}
-                </button>
-                <p className="mt-2 text-sm text-gray-600">
-                  Warning: This action is irreversible. Make sure you want to end the ICO before proceeding.
+            <div className="space-y-4 mb-6">
+              <div>
+                <p className="text-sm font-medium text-gray-500">Total Supply</p>
+                <p className="text-lg font-semibold">{formatSol(icoData.totalSupply)} SOL</p>
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-500">Tokens Sold</p>
+                <p className="text-lg font-semibold">{formatSol(icoData.tokensSold)} SOL</p>
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-500">Token Price</p>
+                <p className="text-lg font-semibold">{formatSol(icoData.tokenPrice)} SOL</p>
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-500">Status</p>
+                <p className="text-lg font-semibold">
+                  {icoData.isActive ? (
+                    <span className="text-green-500">Active</span>
+                  ) : (
+                    <span className="text-red-500">Inactive</span>
+                  )}
                 </p>
               </div>
-            )}
-            {!icoData?.isActive && (
-              <p className="text-lg font-semibold text-center">The ICO has already ended.</p>
+            </div>
+            <button
+              onClick={handleEndIco}
+              disabled={ending || !icoData.isActive}
+              className="w-full bg-red-600 text-white py-2 px-4 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed transition duration-200"
+            >
+              {ending ? 'Ending ICO...' : 'End ICO'}
+            </button>
+            {!icoData.isActive && (
+              <p className="mt-2 text-sm text-gray-600">The ICO is already inactive.</p>
             )}
           </>
         )}
-        {error && <p className="mt-4 text-red-600">{error}</p>}
-        {success && <p className="mt-4 text-green-600">{success}</p>}
+        {success && (
+          <div className="mt-4 p-4 bg-green-100 border border-green-400 text-green-700 rounded-md text-sm">
+            {success}
+          </div>
+        )}
       </div>
     </div>
   );

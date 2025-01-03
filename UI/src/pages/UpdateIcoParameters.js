@@ -3,33 +3,29 @@ import { useConnection, useWallet } from '@solana/wallet-adapter-react';
 import { PublicKey } from '@solana/web3.js';
 import { getProgram } from '../utils/anchor-connection';
 import * as anchor from '@project-serum/anchor';
-import { getRoundTypeFromString, getRoundTypeString } from '../utils/enum-helpers';
-import { formatUnixTimestamp, formatSol } from '../utils/formatters';
-
-import { Buffer } from "buffer";
-
-Buffer.from("anything", "base64");
-window.Buffer = window.Buffer || require("buffer").Buffer;
 
 const UpdateIcoParameters = () => {
   const { connection } = useConnection();
   const wallet = useWallet();
-  const [totalSupply, setTotalSupply] = useState('');
-  const [tokenPrice, setTokenPrice] = useState('');
-  const [startTime, setStartTime] = useState('');
-  const [duration, setDuration] = useState('');
-  const [roundType, setRoundType] = useState('');
+  const [formData, setFormData] = useState({
+    tokenPrice: '',
+    startTime: '',
+    duration: '',
+    isActive: false,
+  });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [currentParameters, setCurrentParameters] = useState(null);
 
   useEffect(() => {
-    fetchCurrentParameters();
+    if (wallet.publicKey) {
+      fetchCurrentParameters();
+    }
   }, [connection, wallet.publicKey]);
 
   const fetchCurrentParameters = async () => {
     if (!wallet.publicKey) return;
+
     try {
       const program = getProgram(connection, wallet);
       const [icoAccount] = await PublicKey.findProgramAddress(
@@ -37,14 +33,28 @@ const UpdateIcoParameters = () => {
         program.programId
       );
       const icoData = await program.account.icoAccount.fetch(icoAccount);
-      setCurrentParameters(icoData);
+
+      setFormData({
+        tokenPrice: (Number(icoData.tokenPrice) / anchor.web3.LAMPORTS_PER_SOL).toString(),
+        startTime: new Date(Number(icoData.startTime) * 1000).toISOString().slice(0, 16),
+        duration: (Number(icoData.duration) / (24 * 60 * 60)).toString(), // Convert seconds to days
+        isActive: icoData.isActive,
+      });
     } catch (err) {
       console.error('Error fetching current parameters:', err);
-      setError('Failed to fetch current parameters');
+      setError('Failed to fetch current parameters. Please try again later.');
     }
   };
 
-  const handleUpdateParameters = async (e) => {
+  const handleInputChange = (e) => {
+    const { name, value, type, checked } = e.target;
+    setFormData(prevState => ({
+      ...prevState,
+      [name]: type === 'checkbox' ? checked : value
+    }));
+  };
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!wallet.publicKey || !wallet.signTransaction) return;
 
@@ -59,152 +69,124 @@ const UpdateIcoParameters = () => {
         program.programId
       );
 
-      const totalSupplyBN = totalSupply ? new anchor.BN(totalSupply) : null;
-      const tokenPriceBN = tokenPrice ? new anchor.BN(tokenPrice) : null;
-      const startTimeBN = startTime 
-        ? new anchor.BN(Math.floor(new Date(startTime).getTime() / 1000))
-        : null;
-      const durationBN = duration ? new anchor.BN(duration) : null;
-      const roundTypeEnum = roundType ? getRoundTypeFromString(roundType) : null;
+      const tokenPrice = new anchor.BN(parseFloat(formData.tokenPrice) * anchor.web3.LAMPORTS_PER_SOL);
+      const startTime = new anchor.BN(Math.floor(new Date(formData.startTime).getTime() / 1000));
+      const duration = new anchor.BN(parseInt(formData.duration) * 24 * 60 * 60); // Convert days to seconds
 
       const tx = await program.methods
-        .updateIcoParameters(
-          totalSupplyBN,
-          tokenPriceBN,
-          startTimeBN,
-          durationBN,
-          roundTypeEnum
-        )
+        .updateIcoParameters(tokenPrice, startTime, duration, formData.isActive)
         .accounts({
-          authority: wallet.publicKey,
           icoAccount,
+          authority: wallet.publicKey,
         })
         .rpc();
 
-      setSuccess(`ICO parameters updated successfully! TxID: ${tx}`);
-      await fetchCurrentParameters();
-      
-      setTotalSupply('');
-      setTokenPrice('');
-      setStartTime('');
-      setDuration('');
-      setRoundType('');
+      setSuccess(`ICO parameters updated successfully! Transaction ID: ${tx}`);
     } catch (err) {
       console.error('Error updating ICO parameters:', err);
-      setError(`Error: ${err.message}`);
+      setError('Failed to update ICO parameters. Please try again later.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="max-w-2xl mx-auto">
-      <div className="bg-white shadow-md rounded-lg overflow-hidden">
-        <div className="px-6 py-4">
-          <h2 className="text-2xl font-bold text-gray-800 mb-6">Update ICO Parameters</h2>
-          {currentParameters && (
-            <div className="mb-6 p-4 bg-gray-100 rounded-lg">
-              <h3 className="text-lg font-semibold mb-2">Current Parameters:</h3>
-              <p><strong>Total Supply:</strong> {formatSol(currentParameters.totalSupply)} SOL</p>
-              <p><strong>Token Price:</strong> {formatSol(currentParameters.tokenPrice)} SOL</p>
-              <p><strong>Start Time:</strong> {formatUnixTimestamp(currentParameters.startTime)}</p>
-              <p><strong>Duration:</strong> {currentParameters.duration.toString()} seconds</p>
-              <p><strong>Round Type:</strong> {getRoundTypeString(currentParameters.roundType)}</p>
-            </div>
-          )}
-          <form onSubmit={handleUpdateParameters} className="space-y-4">
-            <div>
-              <label htmlFor="totalSupply" className="block text-sm font-medium text-gray-700">
-                Total Supply (in SOL):
-              </label>
-              <input
-                type="text"
-                id="totalSupply"
-                value={totalSupply}
-                onChange={(e) => setTotalSupply(e.target.value)}
-                placeholder="Leave blank to keep current value"
-                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-              />
-            </div>
-            <div>
-              <label htmlFor="tokenPrice" className="block text-sm font-medium text-gray-700">
-                Token Price (in SOL):
-              </label>
-              <input
-                type="text"
-                id="tokenPrice"
-                value={tokenPrice}
-                onChange={(e) => setTokenPrice(e.target.value)}
-                placeholder="Leave blank to keep current value"
-                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-              />
-            </div>
-            <div>
-              <label htmlFor="startTime" className="block text-sm font-medium text-gray-700">
-                Start Time:
-              </label>
-              <input
-                type="datetime-local"
-                id="startTime"
-                value={startTime}
-                onChange={(e) => setStartTime(e.target.value)}
-                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-              />
-            </div>
-            <div>
-              <label htmlFor="duration" className="block text-sm font-medium text-gray-700">
-                Duration (in seconds):
-              </label>
-              <input
-                type="number"
-                id="duration"
-                value={duration}
-                onChange={(e) => setDuration(e.target.value)}
-                placeholder="Leave blank to keep current value"
-                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-              />
-            </div>
-            <div>
-              <label htmlFor="roundType" className="block text-sm font-medium text-gray-700">
-                Round Type:
-              </label>
-              <select
-                id="roundType"
-                value={roundType}
-                onChange={(e) => setRoundType(e.target.value)}
-                className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
-              >
-                <option value="">Select to change round type</option>
-                <option value="SeedRound">Seed Round</option>
-                <option value="PreICO">Pre-ICO</option>
-                <option value="PublicICO">Public ICO</option>
-              </select>
-            </div>
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline transition duration-150 ease-in-out"
-            >
-              {loading ? 'Updating...' : 'Update ICO Parameters'}
-            </button>
-          </form>
-          {error && (
-            <div className="mt-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded-md text-sm">
-              {error}
-            </div>
-          )}
-          {success && (
-            <div className="mt-4 p-4 bg-green-100 border border-green-400 text-green-700 rounded-md text-sm">
-              {success}
-            </div>
-          )}
-        </div>
+    <div className="max-w-lg mx-auto">
+      <div className="bg-white shadow-lg rounded-lg p-6">
+        <h2 className="text-2xl font-bold mb-6 text-gray-800">Update ICO Parameters</h2>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label htmlFor="tokenPrice" className="block text-sm font-medium text-gray-700 mb-1">
+              Token Price (SOL):
+            </label>
+            <input
+              type="number"
+              id="tokenPrice"
+              name="tokenPrice"
+              value={formData.tokenPrice}
+              onChange={handleInputChange}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              required
+              min="0"
+              step="0.000000001"
+            />
+          </div>
+          <div>
+            <label htmlFor="startTime" className="block text-sm font-medium text-gray-700 mb-1">
+              Start Time:
+            </label>
+            <input
+              type="datetime-local"
+              id="startTime"
+              name="startTime"
+              value={formData.startTime}
+              onChange={handleInputChange}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              required
+            />
+          </div>
+          <div>
+            <label htmlFor="duration" className="block text-sm font-medium text-gray-700 mb-1">
+              Duration (days):
+            </label>
+            <input
+              type="number"
+              id="duration"
+              name="duration"
+              value={formData.duration}
+              onChange={handleInputChange}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              required
+              min="1"
+            />
+          </div>
+          <div className="flex items-center">
+            <input
+              type="checkbox"
+              id="isActive"
+              name="isActive"
+              checked={formData.isActive}
+              onChange={handleInputChange}
+              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+            />
+            <label htmlFor="isActive" className="ml-2 block text-sm text-gray-900">
+              Is Active
+            </label>
+          </div>
+          <button
+            type="submit"
+            disabled={loading || !wallet.publicKey}
+            className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition duration-200"
+          >
+            {loading ? 'Updating...' : 'Update ICO Parameters'}
+          </button>
+        </form>
+        {error && (
+          <div className="mt-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded-md text-sm">
+            {error}
+          </div>
+        )}
+        {success && (
+          <div className="mt-4 p-4 bg-green-100 border border-green-400 text-green-700 rounded-md text-sm">
+            {success}
+          </div>
+        )}
       </div>
     </div>
   );
 };
 
 export default UpdateIcoParameters;
+
+
+
+
+
+
+
+
+
+
 
 
 

@@ -5,7 +5,7 @@ use anchor_spl::{
     token::{self, Mint, TokenAccount},
 };
  
-declare_id!("GmLfd5j41fTbgL9G3C58Q4xUHbwmyXKfEE22dJg9s9QY");
+declare_id!("FyCz92Au4vcsanwaJZ8PrykVf6oPgreoYKmCque5Qq45");
  
 #[program]
 pub mod advanced_ico_program {

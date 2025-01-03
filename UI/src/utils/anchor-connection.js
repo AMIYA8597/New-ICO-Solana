@@ -1,20 +1,14 @@
+import * as anchor from '@project-serum/anchor';
 import { Connection, PublicKey } from '@solana/web3.js';
-import { Program, AnchorProvider } from '@project-serum/anchor';
-import idl from './ico-idl.json';
-
-const programID = new PublicKey(process.env.REACT_APP_PROGRAM_ID);
+import idl from './idl/ico-idl.json';
 
 export const getProgram = (connection, wallet) => {
-  if (!connection || !wallet) {
-    throw new Error('Connection and wallet are required to get the program');
-  }
-  
-  const provider = new AnchorProvider(
+  const provider = new anchor.AnchorProvider(
     connection,
     wallet,
-    AnchorProvider.defaultOptions()
+    anchor.AnchorProvider.defaultOptions()
   );
-  
-  return new Program(idl, programID, provider);
+  const programId = new PublicKey(process.env.REACT_APP_PROGRAM_ID);
+  return new anchor.Program(idl, programId, provider);
 };
 
