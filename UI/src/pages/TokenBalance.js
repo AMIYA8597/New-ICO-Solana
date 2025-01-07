@@ -3,8 +3,8 @@ import { useConnection, useWallet } from '@solana/wallet-adapter-react';
 import { PublicKey } from '@solana/web3.js';
 import { getProgram } from '../utils/anchor-connection';
 import { formatSol } from '../utils/formatters';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "../components/ui/card"
-import { Button } from "../components/ui/button"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
+import { Button } from "../components/ui/button";
 
 const TokenBalance = () => {
   const { connection } = useConnection();
@@ -64,36 +64,35 @@ const TokenBalance = () => {
   }
 
   return (
-    <div className="max-w-lg mx-auto">
-      <Card>
-        <CardHeader>
-          <CardTitle>Token Balance</CardTitle>
-          <CardDescription>Your current token balance</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="text-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-              <p className="mt-4 text-gray-600">Loading token balance...</p>
-            </div>
-          ) : error ? (
-            <div className="p-4 bg-red-100 border border-red-400 text-red-700 rounded-md text-sm">
-              {error}
-            </div>
-          ) : (
-            <div className="text-center">
-              <p className="text-4xl font-bold text-gray-800">{formatSol(balance)} SOL</p>
-              <p className="mt-2 text-gray-600">Current token balance</p>
-            </div>
-          )}
-        </CardContent>
-        <CardFooter>
-          <Button onClick={fetchTokenBalance} className="w-full">
-            Refresh Balance
-          </Button>
-        </CardFooter>
-      </Card>
-    </div>
+    <Card className="max-w-lg mx-auto">
+      <CardHeader>
+        <CardTitle>Token Balance</CardTitle>
+        <CardDescription>View your current token balance</CardDescription>
+      </CardHeader>
+      <CardContent>
+        {loading ? (
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+            <p className="mt-4 text-gray-600">Loading token balance...</p>
+          </div>
+        ) : error ? (
+          <div className="p-4 bg-red-100 border border-red-400 text-red-700 rounded-md text-sm">
+            {error}
+          </div>
+        ) : (
+          <div className="text-center">
+            <p className="text-4xl font-bold text-gray-800">{formatSol(balance)} SOL</p>
+            <p className="mt-2 text-gray-600">Current token balance</p>
+          </div>
+        )}
+        <Button
+          onClick={fetchTokenBalance}
+          className="mt-6 w-full"
+        >
+          Refresh Balance
+        </Button>
+      </CardContent>
+    </Card>
   );
 };
 

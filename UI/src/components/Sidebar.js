@@ -1,90 +1,51 @@
-import React from 'react';
-import { Link, useLocation } from 'react-router-dom';
-import { useWallet } from '@solana/wallet-adapter-react';
-import { isAdminWallet } from '../utils/admin-check';
-import { Home, CreditCard, Wallet, Users, Settings, Share2, Power, PlusCircle } from 'lucide-react';
+// import React from 'react';
+// import { Link, useLocation } from 'react-router-dom';
+// import { Home, DollarSign, Users, RefreshCw, Power, Settings, Share } from 'lucide-react';
 
-const Sidebar = () => {
-  const location = useLocation();
-  const { publicKey } = useWallet();
+// const Sidebar = () => {
+//   const location = useLocation();
 
-  const navigation = [
-    { name: 'Dashboard', href: '/', icon: Home },
-    { name: 'Buy Tokens', href: '/buy', icon: CreditCard },
-    { name: 'Token Balance', href: '/balance', icon: Wallet },
-  ];
+//   const isActive = (path) => location.pathname === path;
 
-  const adminNavigation = [
-    { name: 'Initialize ICO', href: '/initialize-ico', icon: PlusCircle },
-    { name: 'Manage Investors', href: '/manage-investors', icon: Users },
-    { name: 'Update Parameters', href: '/update-parameters', icon: Settings },
-    { name: 'Distribute Tokens', href: '/distribute-tokens', icon: Share2 },
-    { name: 'End ICO', href: '/end-ico', icon: Power },
-  ];
+//   const navItems = [
+//     { name: 'Dashboard', path: '/admin', icon: Home },
+//     { name: 'Initialize ICO', path: '/admin/initialize-ico', icon: DollarSign },
+//     { name: 'Manage Investors', path: '/admin/manage-investors', icon: Users },
+//     { name: 'Update Round', path: '/admin/update-round', icon: RefreshCw },
+//     { name: 'Update Parameters', path: '/admin/update-parameters', icon: Settings },
+//     { name: 'Distribute Tokens', path: '/admin/distribute-tokens', icon: Share },
+//     { name: 'End ICO', path: '/admin/end-ico', icon: Power },
+//   ];
 
-  const isActive = (path) => location.pathname === path;
+//   return (
 
-  return (
-    <div className="hidden md:flex md:flex-col md:w-64 md:bg-white md:border-r">
-      <div className="flex-1 flex flex-col overflow-y-auto">
-        <nav className="flex-1 px-2 py-4 space-y-1">
-          {navigation.map((item) => {
-            const Icon = item.icon;
-            return (
-              <Link
-                key={item.name}
-                to={item.href}
-                className={`${
-                  isActive(item.href)
-                    ? 'bg-blue-50 text-blue-600'
-                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                } group flex items-center px-2 py-2 text-sm font-medium rounded-md`}
-              >
-                <Icon className={`${
-                  isActive(item.href) ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-500'
-                } mr-3 flex-shrink-0 h-6 w-6`} />
-                {item.name}
-              </Link>
-            );
-          })}
+    
+//     <div className="flex flex-col w-64 bg-white shadow-md">
+//       <div className="flex items-center justify-center h-20 shadow-md">
+//         {/* <h1 className="text-3xl font-bold text-blue-600">Admin Panel</h1> */}
+//       </div>
+//       <ul className="flex flex-col py-4">
+//         {navItems.map((item) => (
+//           <li key={item.name}>
+//             <Link
+//               to={item.path}
+//               className={`flex flex-row items-center h-12 transform hover:translate-x-2 transition-transform ease-in duration-200 ${
+//                 isActive(item.path)
+//                   ? 'text-blue-500 border-r-4 border-blue-500 bg-blue-50'
+//                   : 'text-gray-500 hover:text-blue-500 hover:bg-blue-50'
+//               }`}
+//             >
+//               <span className="inline-flex items-center justify-center h-12 w-12 text-lg text-gray-400">
+//                 <item.icon className={`h-5 w-5 ${isActive(item.path) ? 'text-blue-500' : ''}`} />
+//               </span>
+//               <span className="text-sm font-medium">{item.name}</span>
+//             </Link>
+//           </li>
+//         ))}
+//       </ul>
+//     </div>
+//   );
+// };
 
-          {isAdminWallet(publicKey) && (
-            <>
-              <div className="relative">
-                <div className="absolute inset-0 flex items-center" aria-hidden="true">
-                  <div className="w-full border-t border-gray-300" />
-                </div>
-                <div className="relative flex justify-center">
-                  <span className="px-2 bg-white text-sm text-gray-500">Admin</span>
-                </div>
-              </div>
-
-              {adminNavigation.map((item) => {
-                const Icon = item.icon;
-                return (
-                  <Link
-                    key={item.name}
-                    to={item.href}
-                    className={`${
-                      isActive(item.href)
-                        ? 'bg-blue-50 text-blue-600'
-                        : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                    } group flex items-center px-2 py-2 text-sm font-medium rounded-md`}
-                  >
-                    <Icon className={`${
-                      isActive(item.href) ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-500'
-                    } mr-3 flex-shrink-0 h-6 w-6`} />
-                    {item.name}
-                  </Link>
-                );
-              })}
-            </>
-          )}
-        </nav>
-      </div>
-    </div>
-  );
-};
-
-export default Sidebar;
+// export default Sidebar;
 

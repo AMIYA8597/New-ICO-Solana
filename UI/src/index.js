@@ -4,7 +4,6 @@ import './index.css';
 import App from './App';
 import { Buffer } from 'buffer';
 
-// Polyfill for Buffer
 window.Buffer = Buffer;
 
 ReactDOM.render(

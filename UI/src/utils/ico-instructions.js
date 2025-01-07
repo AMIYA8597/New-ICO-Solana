@@ -1,132 +1,119 @@
-import { getProgram } from './anchor-connection';
+import * as anchor from '@project-serum/anchor';
 import { PublicKey } from '@solana/web3.js';
-import { TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID } from '@solana/spl-token';
+import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
+import { ICO_SEED, PURCHASE_SEED, USER_TOKEN_ACCOUNT_SEED } from './constants';
 
-export const buyTokens = async (connection, wallet, amount) => {
-  const program = getProgram(connection, wallet);
-  const [icoAccount] = await PublicKey.findProgramAddress(
-    [Buffer.from("ico")],
-    program.programId
-  );
-  const [tokenAccount] = await PublicKey.findProgramAddress(
-    [Buffer.from("token_account"), wallet.publicKey.toBuffer()],
-    program.programId
-  );
+export const createInitializeIcoInstruction = (
+  program,
+  authority,
+  tokenMint,
+  totalSupply,
+  seedPrice,
+  preIcoPrice,
+  publicPrice,
+  startTime,
+  duration,
+  roundType
+) => {
+  return program.methods
+    .initialize(
+      totalSupply,
+      seedPrice,
+      preIcoPrice,
+      publicPrice,
+      startTime,
+      duration,
+      roundType
+    )
+    .accounts({
+      icoAccount: PublicKey.findProgramAddressSync(
+        [Buffer.from(ICO_SEED)],
+        program.programId
+      )[0],
+      authority,
+      tokenMint,
+      systemProgram: anchor.web3.SystemProgram.programId,
+    });
+};
 
-  await program.methods
+export const createBuyTokensInstruction = (
+  program,
+  buyer,
+  amount,
+  purchaseCounter
+) => {
+  return program.methods
     .buyTokens(amount)
     .accounts({
-      ico: icoAccount,
-      tokenAccount: tokenAccount,
-      buyer: wallet.publicKey,
-    })
-    .rpc();
+      buyer,
+      icoAccount: PublicKey.findProgramAddressSync(
+        [Buffer.from(ICO_SEED)],
+        program.programId
+      )[0],
+      purchaseAccount: PublicKey.findProgramAddressSync(
+        [
+          Buffer.from(PURCHASE_SEED),
+          buyer.toBuffer(),
+          new anchor.BN(purchaseCounter).toArrayLike(Buffer, 'le', 8),
+        ],
+        program.programId
+      )[0],
+      treasuryWallet: program.provider.publicKey,
+      tokenProgram: TOKEN_PROGRAM_ID,
+      systemProgram: anchor.web3.SystemProgram.programId,
+    });
 };
 
-export const addToWhitelist = async (connection, wallet, investorPublicKey) => {
-  const program = getProgram(connection, wallet);
-  const [icoAccount] = await PublicKey.findProgramAddress(
-    [Buffer.from("ico")],
-    program.programId
-  );
-
-  await program.methods
-    .addToWhitelist(investorPublicKey)
-    .accounts({
-      ico: icoAccount,
-      authority: wallet.publicKey,
-    })
-    .rpc();
-};
-
-export const removeFromWhitelist = async (connection, wallet, investorPublicKey) => {
-  const program = getProgram(connection, wallet);
-  const [icoAccount] = await PublicKey.findProgramAddress(
-    [Buffer.from("ico")],
-    program.programId
-  );
-
-  await program.methods
-    .removeFromWhitelist(investorPublicKey)
-    .accounts({
-      ico: icoAccount,
-      authority: wallet.publicKey,
-    })
-    .rpc();
-};
-
-export const updateIcoParameters = async (connection, wallet, params) => {
-  const program = getProgram(connection, wallet);
-  const [icoAccount] = await PublicKey.findProgramAddress(
-    [Buffer.from("ico")],
-    program.programId
-  );
-
-  await program.methods
-    .updateIcoParameters(params)
-    .accounts({
-      ico: icoAccount,
-      authority: wallet.publicKey,
-    })
-    .rpc();
-};
-
-export const distributeTokens = async (connection, wallet, purchaseAccount) => {
-  const program = getProgram(connection, wallet);
-  const [icoAccount] = await PublicKey.findProgramAddress(
-    [Buffer.from("ico")],
-    program.programId
-  );
-
-  const [treasuryTokenAccount] = await PublicKey.findProgramAddress(
-    [Buffer.from("treasury"), icoAccount.toBuffer()],
-    program.programId
-  );
-
-  const purchase = await program.account.purchaseAccount.fetch(purchaseAccount);
-  const buyerTokenAccount = await getAssociatedTokenAddress(
-    program.programId,
-    purchase.buyer
-  );
-
-  await program.methods
+export const createDistributeTokensInstruction = (
+  program,
+  authority,
+  buyer,
+  purchaseAccountPubkey
+) => {
+  return program.methods
     .distributeTokens()
     .accounts({
-      authority: wallet.publicKey,
-      icoAccount: icoAccount,
-      purchaseAccount: purchaseAccount,
-      treasuryTokenAccount: treasuryTokenAccount,
-      buyerTokenAccount: buyerTokenAccount,
+      authority,
+      icoAccount: PublicKey.findProgramAddressSync(
+        [Buffer.from(ICO_SEED)],
+        program.programId
+      )[0],
+      purchaseAccount: purchaseAccountPubkey,
+      buyer,
+      userTokenAccount: PublicKey.findProgramAddressSync(
+        [Buffer.from(USER_TOKEN_ACCOUNT_SEED), buyer.toBuffer()],
+        program.programId
+      )[0],
       tokenProgram: TOKEN_PROGRAM_ID,
-    })
-    .rpc();
+      systemProgram: anchor.web3.SystemProgram.programId,
+    });
 };
 
-export const endIco = async (connection, wallet) => {
-  const program = getProgram(connection, wallet);
-  const [icoAccount] = await PublicKey.findProgramAddress(
-    [Buffer.from("ico")],
-    program.programId
-  );
+export const createUpdateRoundInstruction = (
+  program,
+  authority,
+  newRoundType
+) => {
+  return program.methods
+    .updateRound(newRoundType)
+    .accounts({
+      icoAccount: PublicKey.findProgramAddressSync(
+        [Buffer.from(ICO_SEED)],
+        program.programId
+      )[0],
+      authority,
+    });
+};
 
-  await program.methods
+export const createEndIcoInstruction = (program, authority) => {
+  return program.methods
     .endIco()
     .accounts({
-      ico: icoAccount,
-      authority: wallet.publicKey,
-    })
-    .rpc();
+      icoAccount: PublicKey.findProgramAddressSync(
+        [Buffer.from(ICO_SEED)],
+        program.programId
+      )[0],
+      authority,
+    });
 };
-
-// Helper function to get associated token address
-async function getAssociatedTokenAddress(mint, owner) {
-  return (await PublicKey.findProgramAddress(
-    [
-      owner.toBuffer(),
-      TOKEN_PROGRAM_ID.toBuffer(),
-      mint.toBuffer(),
-    ],
-    ASSOCIATED_TOKEN_PROGRAM_ID
-  ))[0];
-}
 

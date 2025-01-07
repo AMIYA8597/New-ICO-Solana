@@ -1,26 +1,17 @@
-export const APP_NAME = "Solana ICO Platform";
 export const LAMPORTS_PER_SOL = 1000000000;
 
+export const ICO_SEED = 'ico';
+export const PURCHASE_SEED = 'purchase';
+export const USER_TOKEN_ACCOUNT_SEED = 'user_token_account';
 
+export const ROUND_TYPES = {
+  SEED: 'Seed',
+  PRE_ICO: 'PreICO',
+  PUBLIC_ICO: 'PublicICO',
+};
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-// export const NETWORK = process.env.REACT_APP_NETWORK || 'devnet';
-// export const ADMIN_WALLET = process.env.REACT_APP_ADMIN_WALLET_ADDRESS;
-// export const TOKEN_MINT = process.env.REACT_APP_TOKEN_MINT_ADDRESS;
-// export const PROGRAM_ID = process.env.REACT_APP_PROGRAM_ID;
-
-// export const APP_NAME = 'Solana ICO';
-// export const APP_LOGO = '/logo.svg'; // Place your logo in the public folder
+export const ICO_STATUS = {
+  ACTIVE: 'Active',
+  INACTIVE: 'Inactive',
+};
 
