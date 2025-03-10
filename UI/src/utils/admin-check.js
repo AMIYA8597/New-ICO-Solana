@@ -17,38 +17,3 @@ export const isAdminWallet = (publicKey) => {
     return false;
   }
 };
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-// import { PublicKey } from '@solana/web3.js';
-
-// // Hardcode the admin wallet address for development
-// const ADMIN_WALLET = 'DYKC..pUvW'; // Replace with your actual admin wallet address
-
-// export const isAdminWallet = (publicKey) => {
-//   if (!publicKey) return false;
-//   return publicKey.toBase58() === ADMIN_WALLET;
-// };
-
