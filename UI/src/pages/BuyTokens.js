@@ -93,12 +93,12 @@ const BuyTokens = () => {
 
   const calculateTokenAmount = () => {
     if (!amount || !icoData) return 0;
-    return parseFloat(amount) / (icoData.currentPublicPrice.toNumber() / anchor.web3.LAMPORTS_PER_SOL);
+    return parseFloat(amount) / (icoData.currentPublicPrice.toString() / anchor.web3.LAMPORTS_PER_SOL);
   };
 
   const calculateTokensSoldPercentage = () => {
     if (!icoData || !icoData.tokensSold || !icoData.totalSupply) return 0;
-    return (icoData.tokensSold.toNumber() / icoData.totalSupply.toNumber()) * 100;
+    return (icoData.tokensSold.toString() / icoData.totalSupply.toString()) * 100;
   };
 
   const tokensSoldPercentage = calculateTokensSoldPercentage();

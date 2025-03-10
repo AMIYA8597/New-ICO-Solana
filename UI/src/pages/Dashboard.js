@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useConnection, useWallet } from '@solana/wallet-adapter-react';
 import { PublicKey } from '@solana/web3.js';
+import BN from 'bn.js'; 
 import { getProgram } from '../utils/anchor-connection';
 import { formatUnixTimestamp, formatSol } from '../utils/formatters';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
@@ -19,10 +20,10 @@ const Dashboard = () => {
 
   useEffect(() => {
     if (icoData && icoData.startTime && icoData.duration) {
-      const timer = setInterval(() => {
+        const timer = setInterval(() => {
         const now = Math.floor(Date.now() / 1000);
-        const startTime = icoData.startTime.toNumber();
-        const duration = icoData.duration.toNumber();
+        const startTime = icoData.startTime.toString();
+        const duration = icoData.duration.toString();
         const endTime = startTime + duration;
         const remaining = endTime - now;
         
@@ -74,8 +75,11 @@ const Dashboard = () => {
     );
   }
 
-  const tokensSoldPercentage = icoData.tokensSold && icoData.totalSupply
-    ? (icoData.tokensSold.toNumber() / icoData.totalSupply.toNumber()) * 100
+  const tokensSold = icoData.tokensSold;
+  const totalSupply = icoData.totalSupply;
+  
+  const tokensSoldPercentage = tokensSold && totalSupply 
+    ? tokensSold.mul(new BN(100)).div(totalSupply).toNumber() // Convert to number
     : 0;
 
   return (
@@ -98,7 +102,7 @@ const Dashboard = () => {
           <CardContent>
             <p className="text-3xl font-bold">{formatSol(icoData.tokensSold)} SOL</p>
             <p className="mt-2 text-sm text-gray-600">
-              {tokensSoldPercentage.toFixed(2)}% of total supply
+               {tokensSoldPercentage.toFixed(2)}% of total supply
             </p>
           </CardContent>
         </Card>
@@ -149,7 +153,7 @@ const Dashboard = () => {
             <div>
               <p className="text-sm font-medium text-gray-500">End Time</p>
               <p className="text-lg font-semibold">
-                {formatUnixTimestamp(icoData.startTime.toNumber() + icoData.duration.toNumber())}
+                {formatUnixTimestamp(icoData.startTime.toString() + icoData.duration.toString())}
               </p>
             </div>
             <div>
