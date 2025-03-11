@@ -99,13 +99,13 @@ const BuyTokens = () => {
     if (!amount || !icoData) return 0
 
     // Calculate based on the current price
-    const currentPrice = icoData.currentPublicPrice.toNumber() / anchor.web3.LAMPORTS_PER_SOL
+    const currentPrice = icoData.currentPublicPrice.toString() / anchor.web3.LAMPORTS_PER_SOL
     return Number.parseFloat(amount) / currentPrice
   }
 
   const calculateTokensSoldPercentage = () => {
     if (!icoData) return 0
-    return (icoData.tokensSold.toNumber() / icoData.totalSupply.toNumber()) * 100
+    return (icoData.tokensSold.toString() / icoData.totalSupply.toString()) * 100
   }
 
   const tokensSoldPercentage = calculateTokensSoldPercentage()

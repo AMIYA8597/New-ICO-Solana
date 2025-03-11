@@ -1485,78 +1485,81 @@ src/pages/BuyTokens.js
 
 
 
+"use client"
 
-import React, { useState, useEffect } from 'react';
-import { useConnection, useWallet } from '@solana/wallet-adapter-react';
-import { PublicKey } from '@solana/web3.js';
-import { getProgram } from '../utils/anchor-connection';
-import * as anchor from '@project-serum/anchor';
-import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
-import { formatSol } from '../utils/formatters';
-import {  Label } from "../components/ui/label"
-import { Card, Input, Button } from "../components/ui/cardTitle";
+import { useState, useEffect } from "react"
+import { useConnection, useWallet } from "@solana/wallet-adapter-react"
+import { PublicKey } from "@solana/web3.js"
+import { getProgram } from "../utils/anchor-connection"
+import * as anchor from "@project-serum/anchor"
+import { TOKEN_PROGRAM_ID } from "@solana/spl-token"
+import { formatSol } from "../utils/formatters"
+import { Label } from "../components/ui/label"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card"
+import { Input } from "../components/ui/input"
+import { Button } from "../components/ui/button"
+import { Alert, AlertDescription } from "../components/ui/alert"
+import { Loader2 } from "lucide-react"
 
 const BuyTokens = () => {
-  const { connection } = useConnection();
-  const wallet = useWallet();
-  const [amount, setAmount] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
-  const [icoData, setIcoData] = useState(null);
+  const { connection } = useConnection()
+  const wallet = useWallet()
+  const [amount, setAmount] = useState("")
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState("")
+  const [success, setSuccess] = useState("")
+  const [icoData, setIcoData] = useState(null)
 
   useEffect(() => {
     if (wallet.publicKey) {
-      fetchIcoData();
+      fetchIcoData()
     }
-  }, [connection, wallet.publicKey]);
+  }, [connection, wallet.publicKey])
 
   const fetchIcoData = async () => {
-    if (!wallet.publicKey) return;
-    
+    if (!wallet.publicKey) return
+
     try {
-      const program = getProgram(connection, wallet);
-      const [icoAccount] = await PublicKey.findProgramAddress(
-        [Buffer.from('ico')],
-        program.programId
-      );
-      const data = await program.account.icoAccount.fetch(icoAccount);
-      setIcoData(data);
+      const program = getProgram(connection, wallet)
+      const [icoAccount] = await PublicKey.findProgramAddress([Buffer.from("ico")], program.programId)
+      const data = await program.account.icoAccount.fetch(icoAccount)
+      setIcoData(data)
     } catch (err) {
-      console.error('Error fetching ICO data:', err);
-      setError('Failed to fetch ICO data. Please try again later.');
+      console.error("Error fetching ICO data:", err)
+      setError("Failed to fetch ICO data. Please try again later.")
     }
-  };
+  }
 
   const handleBuyTokens = async (e) => {
-    e.preventDefault();
-    if (!wallet.publicKey || !wallet.signTransaction || !icoData) return;
+    e.preventDefault()
+    if (!wallet.publicKey || !wallet.signTransaction || !icoData) return
 
-    setLoading(true);
-    setError('');
-    setSuccess('');
+    setLoading(true)
+    setError("")
+    setSuccess("")
 
     try {
-      const program = getProgram(connection, wallet);
-      const [icoAccount] = await PublicKey.findProgramAddress(
-        [Buffer.from('ico')],
-        program.programId
-      );
+      const program = getProgram(connection, wallet)
+      const [icoAccount] = await PublicKey.findProgramAddress([Buffer.from("ico")], program.programId)
 
-      const treasuryWallet = icoData.authority;
-      const purchaseCounter = icoData.purchaseCounter;
-      
+      // Get the treasury wallet from the authority field
+      const treasuryWallet = icoData.authority
+      const purchaseCounter = icoData.purchaseCounter
+
+      // Create the purchase account PDA
       const [purchaseAccount] = await PublicKey.findProgramAddress(
         [
-          Buffer.from('purchase'),
+          Buffer.from("purchase"),
           wallet.publicKey.toBuffer(),
-          new anchor.BN(purchaseCounter).toArrayLike(Buffer, 'le', 8)
+          new anchor.BN(purchaseCounter).toArrayLike(Buffer, "le", 8),
         ],
-        program.programId
-      );
+        program.programId,
+      )
 
-      const amountLamports = new anchor.BN(parseFloat(amount) * anchor.web3.LAMPORTS_PER_SOL);
+      // Convert amount to lamports
+      const amountLamports = new anchor.BN(Number.parseFloat(amount) * anchor.web3.LAMPORTS_PER_SOL)
 
+      // Call the buyTokens instruction
       const tx = await program.methods
         .buyTokens(amountLamports)
         .accounts({
@@ -1567,35 +1570,40 @@ const BuyTokens = () => {
           tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: anchor.web3.SystemProgram.programId,
         })
-        .rpc();
+        .rpc()
 
-      setSuccess(`Tokens purchased successfully! Transaction ID: ${tx}`);
-      await fetchIcoData();
+      setSuccess(`Tokens purchased successfully! Transaction ID: ${tx}`)
+      await fetchIcoData() // Refresh ICO data
     } catch (err) {
-      console.error('Error buying tokens:', err);
-      setError('Token purchase failed. Please try again later.');
+      console.error("Error buying tokens:", err)
+      setError(`Token purchase failed: ${err.message}`)
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }
 
   const calculateTokenAmount = () => {
-    if (!amount || !icoData) return 0;
-    return parseFloat(amount) / (icoData.currentPublicPrice.toString() / anchor.web3.LAMPORTS_PER_SOL);
-  };
+    if (!amount || !icoData) return 0
+
+    // Calculate based on the current price
+    const currentPrice = icoData.currentPublicPrice.toString() / anchor.web3.LAMPORTS_PER_SOL
+    return Number.parseFloat(amount) / currentPrice
+  }
 
   const calculateTokensSoldPercentage = () => {
-    if (!icoData || !icoData.tokensSold || !icoData.totalSupply) return 0;
-    return (icoData.tokensSold.toString() / icoData.totalSupply.toString()) * 100;
-  };
+    if (!icoData) return 0
+    return (icoData.tokensSold.toString() / icoData.totalSupply.toString()) * 100
+  }
 
-  const tokensSoldPercentage = calculateTokensSoldPercentage();
+  const tokensSoldPercentage = calculateTokensSoldPercentage()
 
   return (
     <Card className="max-w-lg mx-auto">
-      <div className="p-6">
-        <h2 className="text-2xl font-bold mb-4">Buy Tokens</h2>
-        <p className="text-gray-600 mb-6">Purchase tokens for the Solana ICO</p>
+      <CardHeader>
+        <CardTitle>Buy Tokens</CardTitle>
+        <CardDescription>Purchase tokens for the Solana ICO</CardDescription>
+      </CardHeader>
+      <CardContent>
         <form onSubmit={handleBuyTokens} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="amount">Amount of SOL to spend:</Label>
@@ -1615,18 +1623,25 @@ const BuyTokens = () => {
             </div>
           )}
           <Button type="submit" disabled={loading || !wallet.publicKey} className="w-full">
-            {loading ? 'Processing...' : 'Buy Tokens'}
+            {loading ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Processing...
+              </>
+            ) : (
+              "Buy Tokens"
+            )}
           </Button>
         </form>
         {error && (
-          <div className="mt-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded-md text-sm">
-            {error}
-          </div>
+          <Alert variant="destructive" className="mt-4">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
         )}
         {success && (
-          <div className="mt-4 p-4 bg-green-100 border border-green-400 text-green-700 rounded-md text-sm">
-            {success}
-          </div>
+          <Alert className="mt-4 bg-green-50 text-green-800 border-green-500">
+            <AlertDescription>{success}</AlertDescription>
+          </Alert>
         )}
         {icoData && (
           <div className="mt-6 space-y-4">
@@ -1636,7 +1651,7 @@ const BuyTokens = () => {
             </div>
             <div className="flex justify-between items-center">
               <span className="text-sm font-medium text-gray-700">Tokens Available:</span>
-              <span className="text-sm font-bold">{formatSol(icoData.totalSupply.sub(icoData.tokensSold))} SOL</span>
+              <span className="text-sm font-bold">{formatSol(icoData.totalSupply.sub(icoData.tokensSold))}</span>
             </div>
             <div>
               <div className="flex justify-between items-center mb-1">
@@ -1644,20 +1659,17 @@ const BuyTokens = () => {
                 <span className="text-sm font-bold">{tokensSoldPercentage.toFixed(2)}%</span>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700">
-                <div 
-                  className="bg-blue-600 h-2.5 rounded-full" 
-                  style={{ width: `${tokensSoldPercentage}%` }}
-                ></div>
+                <div className="bg-blue-600 h-2.5 rounded-full" style={{ width: `${tokensSoldPercentage}%` }}></div>
               </div>
             </div>
           </div>
         )}
-      </div>
+      </CardContent>
     </Card>
-  );
-};
+  )
+}
 
-export default BuyTokens;
+export default BuyTokens
 
 
 
@@ -3097,6 +3109,964 @@ export default ManageInvestors;
 
 
 
+
+
+
+
+
+
+
+
+
+src/pages/Staking.js
+
+
+
+
+
+
+"use client"
+
+import { useState, useEffect } from "react"
+import { useConnection, useWallet } from "@solana/wallet-adapter-react"
+import { PublicKey } from "@solana/web3.js"
+import { getStakingProgram } from "../utils/anchor-connection"
+import * as anchor from "@project-serum/anchor"
+import { TOKEN_PROGRAM_ID } from "@solana/spl-token"
+import { formatSol } from "../utils/formatters"
+import { Label } from "../components/ui/label"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card"
+import { Input } from "../components/ui/input"
+import { Button } from "../components/ui/button"
+import { Alert, AlertDescription } from "../components/ui/alert"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs"
+import { Loader2 } from "lucide-react"
+
+const Staking = () => {
+  const { connection } = useConnection()
+  const wallet = useWallet()
+  const [stakeAmount, setStakeAmount] = useState("")
+  const [unstakeAmount, setUnstakeAmount] = useState("")
+  const [couponCode, setCouponCode] = useState("")
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState("")
+  const [success, setSuccess] = useState("")
+  const [stakingData, setStakingData] = useState(null)
+  const [stakerInfo, setStakerInfo] = useState(null)
+  const [stakeRecords, setStakeRecords] = useState([])
+  const [activeTab, setActiveTab] = useState("stake")
+
+  useEffect(() => {
+    if (wallet.publicKey) {
+      fetchStakingData()
+    }
+  }, [connection, wallet.publicKey])
+
+  const fetchStakingData = async () => {
+    if (!wallet.publicKey) return
+
+    try {
+      setLoading(true)
+      const program = getStakingProgram(connection, wallet)
+
+      // Fetch staking account
+      const [stakingAccount] = await PublicKey.findProgramAddress([Buffer.from("staking_account")], program.programId)
+      const stakingData = await program.account.stakingAccount.fetch(stakingAccount)
+      setStakingData(stakingData)
+
+      // Fetch staker info
+      try {
+        const [stakerInfoAccount] = await PublicKey.findProgramAddress(
+          [Buffer.from("staker_info"), stakingAccount.toBuffer(), wallet.publicKey.toBuffer()],
+          program.programId,
+        )
+        const stakerInfo = await program.account.stakerInfo.fetch(stakerInfoAccount)
+        setStakerInfo(stakerInfo)
+      } catch (err) {
+        console.log("No staker info found, user has not staked yet")
+      }
+
+      // Fetch stake records
+      const stakeAccountsFilters = [
+        { dataSize: program.account.stakeRecord.size },
+        { memcmp: { offset: 8, bytes: wallet.publicKey.toBase58() } }, // owner field
+      ]
+
+      const stakeAccounts = await connection.getProgramAccounts(program.programId, {
+        filters: stakeAccountsFilters,
+      })
+
+      const records = await Promise.all(
+        stakeAccounts.map(async (account) => {
+          const stakeRecord = await program.account.stakeRecord.fetch(account.pubkey)
+          return {
+            pubkey: account.pubkey,
+            ...stakeRecord,
+          }
+        }),
+      )
+
+      setStakeRecords(records)
+      setLoading(false)
+    } catch (err) {
+      console.error("Error fetching staking data:", err)
+      setError("Failed to fetch staking data. Please try again later.")
+      setLoading(false)
+    }
+  }
+
+  const handleStake = async (e) => {
+    e.preventDefault()
+    if (!wallet.publicKey || !wallet.signTransaction || !stakingData) return
+
+    setLoading(true)
+    setError("")
+    setSuccess("")
+
+    try {
+      const program = getStakingProgram(connection, wallet)
+      const [stakingAccount] = await PublicKey.findProgramAddress([Buffer.from("staking_account")], program.programId)
+
+      // Get token accounts
+      const tokenMint = stakingData.tokenMint
+
+      // Find the user's token account for this mint
+      const userTokenAccounts = await connection.getParsedTokenAccountsByOwner(wallet.publicKey, { mint: tokenMint })
+
+      if (userTokenAccounts.value.length === 0) {
+        throw new Error("No token account found for this mint. Please make sure you have the token.")
+      }
+
+      const userTokenAccount = userTokenAccounts.value[0].pubkey
+
+      // Find the admin's staking wallet
+      const adminTokenAccounts = await connection.getParsedTokenAccountsByOwner(stakingData.admin, { mint: tokenMint })
+
+      if (adminTokenAccounts.value.length === 0) {
+        throw new Error("Admin staking wallet not found.")
+      }
+
+      const adminStakingWallet = adminTokenAccounts.value[0].pubkey
+
+      // Create a new stake record account
+      const stakeRecord = anchor.web3.Keypair.generate()
+
+      // Convert amount to lamports
+      const amountLamports = new anchor.BN(Number.parseFloat(stakeAmount) * anchor.web3.LAMPORTS_PER_SOL)
+
+      // Find staker info PDA
+      const [stakerInfoAccount] = await PublicKey.findProgramAddress(
+        [Buffer.from("staker_info"), stakingAccount.toBuffer(), wallet.publicKey.toBuffer()],
+        program.programId,
+      )
+
+      // Call the stakeTokens instruction
+      const tx = await program.methods
+        .stakeTokens(amountLamports, couponCode ? couponCode : null)
+        .accounts({
+          stakingAccount,
+          stakeRecord: stakeRecord.publicKey,
+          stakerInfo: stakerInfoAccount,
+          stakerTokenAccount: userTokenAccount,
+          adminStakingWallet,
+          staker: wallet.publicKey,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: anchor.web3.SystemProgram.programId,
+        })
+        .signers([stakeRecord])
+        .rpc()
+
+      setSuccess(`Tokens staked successfully! Transaction ID: ${tx}`)
+      setStakeAmount("")
+      setCouponCode("")
+      await fetchStakingData() // Refresh staking data
+    } catch (err) {
+      console.error("Error staking tokens:", err)
+      setError(`Staking failed: ${err.message}`)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleUnstake = async (e) => {
+    e.preventDefault()
+    if (!wallet.publicKey || !wallet.signTransaction || stakeRecords.length === 0) return
+
+    setLoading(true)
+    setError("")
+    setSuccess("")
+
+    try {
+      const program = getStakingProgram(connection, wallet)
+      const [stakingAccount] = await PublicKey.findProgramAddress([Buffer.from("staking_account")], program.programId)
+
+      // Get the selected stake record
+      const stakeRecord = stakeRecords[0] // For simplicity, using the first record
+
+      // Get token accounts
+      const tokenMint = stakingData.tokenMint
+
+      // Find the user's token account for this mint
+      const userTokenAccounts = await connection.getParsedTokenAccountsByOwner(wallet.publicKey, { mint: tokenMint })
+
+      if (userTokenAccounts.value.length === 0) {
+        throw new Error("No token account found for this mint.")
+      }
+
+      const userTokenAccount = userTokenAccounts.value[0].pubkey
+
+      // Find the admin's staking wallet
+      const adminTokenAccounts = await connection.getParsedTokenAccountsByOwner(stakingData.admin, { mint: tokenMint })
+
+      if (adminTokenAccounts.value.length === 0) {
+        throw new Error("Admin staking wallet not found.")
+      }
+
+      const adminStakingWallet = adminTokenAccounts.value[0].pubkey
+
+      // Find staker info PDA
+      const [stakerInfoAccount] = await PublicKey.findProgramAddress(
+        [Buffer.from("staker_info"), stakingAccount.toBuffer(), wallet.publicKey.toBuffer()],
+        program.programId,
+      )
+
+      // Convert amount to lamports
+      const amountLamports = new anchor.BN(Number.parseFloat(unstakeAmount) * anchor.web3.LAMPORTS_PER_SOL)
+
+      // Call the unstakeCombined instruction
+      const tx = await program.methods
+        .unstakeCombined(amountLamports)
+        .accounts({
+          stakingAccount,
+          stakeRecord: stakeRecord.pubkey,
+          stakerInfo: stakerInfoAccount,
+          stakerTokenAccount: userTokenAccount,
+          adminStakingWallet,
+          tokenMint: stakingData.tokenMint,
+          staker: wallet.publicKey,
+          owner: stakingData.admin, // This is the admin who can sign for token transfers
+          tokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: anchor.web3.SystemProgram.programId,
+        })
+        .rpc()
+
+      setSuccess(`Tokens unstaked successfully! Transaction ID: ${tx}`)
+      setUnstakeAmount("")
+      await fetchStakingData() // Refresh staking data
+    } catch (err) {
+      console.error("Error unstaking tokens:", err)
+      setError(`Unstaking failed: ${err.message}`)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const calculateRewardRate = () => {
+    if (!stakingData) return "0%"
+
+    if (stakerInfo && stakerInfo.totalStaked.toNumber() >= 1000) {
+      return `${stakingData.highTierFee}%`
+    } else if (stakerInfo && stakerInfo.totalStaked.toNumber() >= 500) {
+      return `${stakingData.midTierFee}%`
+    } else {
+      return `${stakingData.lowTierFee}%`
+    }
+  }
+
+  const calculateLockupPeriod = (tier) => {
+    switch (tier) {
+      case 3:
+        return "180 days"
+      case 2:
+        return "90 days"
+      case 1:
+        return "30 days"
+      default:
+        return "No lockup"
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle>Staking Dashboard</CardTitle>
+          <CardDescription>Stake your tokens to earn rewards</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {loading && !stakingData ? (
+            <div className="flex justify-center items-center py-8">
+              <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+            </div>
+          ) : (
+            <>
+              {stakerInfo && (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                  <div className="bg-gray-50 p-4 rounded-lg">
+                    <p className="text-sm text-gray-500">Total Staked</p>
+                    <p className="text-2xl font-bold">{formatSol(stakerInfo.totalStaked)} SOL</p>
+                  </div>
+                  <div className="bg-gray-50 p-4 rounded-lg">
+                    <p className="text-sm text-gray-500">Reward Rate</p>
+                    <p className="text-2xl font-bold">{calculateRewardRate()}</p>
+                  </div>
+                  <div className="bg-gray-50 p-4 rounded-lg">
+                    <p className="text-sm text-gray-500">Spin Count</p>
+                    <p className="text-2xl font-bold">{stakerInfo.spinCount}</p>
+                  </div>
+                </div>
+              )}
+
+              <Tabs defaultValue="stake" value={activeTab} onValueChange={setActiveTab} className="w-full">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="stake">Stake</TabsTrigger>
+                  <TabsTrigger value="unstake">Unstake</TabsTrigger>
+                </TabsList>
+                <TabsContent value="stake">
+                  <form onSubmit={handleStake} className="space-y-4 pt-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="stakeAmount">Amount to Stake (SOL):</Label>
+                      <Input
+                        type="number"
+                        id="stakeAmount"
+                        value={stakeAmount}
+                        onChange={(e) => setStakeAmount(e.target.value)}
+                        required
+                        min="0"
+                        step="0.000000001"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="couponCode">Coupon Code (Optional):</Label>
+                      <Input
+                        type="text"
+                        id="couponCode"
+                        value={couponCode}
+                        onChange={(e) => setCouponCode(e.target.value)}
+                      />
+                    </div>
+                    <Button type="submit" disabled={loading || !wallet.publicKey} className="w-full">
+                      {loading ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Processing...
+                        </>
+                      ) : (
+                        "Stake Tokens"
+                      )}
+                    </Button>
+                  </form>
+                </TabsContent>
+                <TabsContent value="unstake">
+                  {stakeRecords.length > 0 ? (
+                    <form onSubmit={handleUnstake} className="space-y-4 pt-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="unstakeAmount">Amount to Unstake (SOL):</Label>
+                        <Input
+                          type="number"
+                          id="unstakeAmount"
+                          value={unstakeAmount}
+                          onChange={(e) => setUnstakeAmount(e.target.value)}
+                          required
+                          min="0"
+                          max={stakeRecords[0].amount.toNumber() / anchor.web3.LAMPORTS_PER_SOL}
+                          step="0.000000001"
+                        />
+                      </div>
+                      <Button type="submit" disabled={loading || !wallet.publicKey} className="w-full">
+                        {loading ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Processing...
+                          </>
+                        ) : (
+                          "Unstake Tokens"
+                        )}
+                      </Button>
+                    </form>
+                  ) : (
+                    <div className="py-8 text-center">
+                      <p className="text-gray-500">You don't have any staked tokens to unstake.</p>
+                    </div>
+                  )}
+                </TabsContent>
+              </Tabs>
+
+              {error && (
+                <Alert variant="destructive" className="mt-4">
+                  <AlertDescription>{error}</AlertDescription>
+                </Alert>
+              )}
+              {success && (
+                <Alert className="mt-4 bg-green-50 text-green-800 border-green-500">
+                  <AlertDescription>{success}</AlertDescription>
+                </Alert>
+              )}
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      {stakeRecords.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Your Stake Records</CardTitle>
+            <CardDescription>View your active stake records</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {stakeRecords.map((record, index) => (
+                <div key={index} className="border rounded-lg p-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-sm text-gray-500">Amount Staked</p>
+                      <p className="font-medium">{formatSol(record.amount)} SOL</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-500">Tier</p>
+                      <p className="font-medium">Tier {record.tier}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-500">Staked On</p>
+                      <p className="font-medium">{new Date(record.stakeTimestamp * 1000).toLocaleDateString()}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-500">Lockup Period</p>
+                      <p className="font-medium">{calculateLockupPeriod(record.tier)}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-500">Unlock Date</p>
+                      <p className="font-medium">{new Date(record.endTimestamp * 1000).toLocaleDateString()}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-500">Spin Count</p>
+                      <p className="font-medium">{record.spinCount}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  )
+}
+
+export default Staking
+
+
+
+
+
+
+
+
+src/pages/StakingAdmin.js
+
+
+
+
+
+
+
+"use client";
+
+import { useState, useEffect } from "react";
+import { useConnection, useWallet } from "@solana/wallet-adapter-react";
+import { PublicKey } from "@solana/web3.js";
+import { getStakingProgram } from "../utils/anchor-connection";
+import * as anchor from "@project-serum/anchor";
+import { isAdminWallet } from "../utils/admin-check";
+import AdminLayout from "../components/AdminLayout";
+import { Label } from "../components/ui/label";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "../components/ui/card";
+import { Input } from "../components/ui/input";
+import { Button } from "../components/ui/button";
+import { Alert, AlertDescription } from "../components/ui/alert";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "../components/ui/tabs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../components/ui/select";
+import { Loader2 } from "lucide-react";
+
+const StakingAdmin = () => {
+  const { connection } = useConnection();
+  const wallet = useWallet();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const [stakingData, setStakingData] = useState(null);
+  const [activeTab, setActiveTab] = useState("update");
+
+  // Update staking parameters form
+  const [updateForm, setUpdateForm] = useState({
+    lockupPeriod: "",
+    lowTierFee: "",
+    midTierFee: "",
+    highTierFee: "",
+  });
+
+  // Create coupon form
+  const [couponForm, setCreateCouponForm] = useState({
+    code: "",
+    bonusType: "Percentage",
+    bonusValue: "",
+    duration: "",
+    minStakeAmount: "",
+    maxUses: "",
+    couponCategory: "NewUser",
+  });
+
+  useEffect(() => {
+    if (wallet.publicKey && isAdminWallet(wallet.publicKey)) {
+      fetchStakingData();
+    }
+  }, [connection, wallet.publicKey]);
+
+  const fetchStakingData = async () => {
+    if (!wallet.publicKey) return;
+
+    try {
+      setLoading(true);
+      const program = getStakingProgram(connection, wallet);
+
+      // Fetch staking account
+      const [stakingAccount] = await PublicKey.findProgramAddress(
+        [Buffer.from("staking_account")],
+        program.programId
+      );
+      const data = await program.account.stakingAccount.fetch(stakingAccount);
+      setStakingData(data);
+
+      // Set form values
+      setUpdateForm({
+        lockupPeriod: data.lockupPeriod.toString(),
+        lowTierFee: data.lowTierFee.toString(),
+        midTierFee: data.midTierFee.toString(),
+        highTierFee: data.highTierFee.toString(),
+      });
+
+      setLoading(false);
+    } catch (err) {
+      console.error("Error fetching staking data:", err);
+      setError("Failed to fetch staking data. Please try again later.");
+      setLoading(false);
+    }
+  };
+
+  const handleUpdateStakingParams = async (e) => {
+    e.preventDefault();
+    if (!wallet.publicKey || !isAdminWallet(wallet.publicKey)) return;
+
+    setLoading(true);
+    setError("");
+    setSuccess("");
+
+    try {
+      const program = getStakingProgram(connection, wallet);
+      const [stakingAccount] = await PublicKey.findProgramAddress(
+        [Buffer.from("staking_account")],
+        program.programId
+      );
+
+      // Convert form values
+      const lockupPeriod = new anchor.BN(
+        Number.parseInt(updateForm.lockupPeriod)
+      );
+      const lowTierFee = Number.parseFloat(updateForm.lowTierFee);
+      const midTierFee = Number.parseFloat(updateForm.midTierFee);
+      const highTierFee = Number.parseFloat(updateForm.highTierFee);
+
+      // Call the update instruction
+      const tx = await program.methods
+        .update(lockupPeriod, lowTierFee, midTierFee, highTierFee)
+        .accounts({
+          stakingAccount,
+          admin: wallet.publicKey,
+        })
+        .rpc();
+
+      setSuccess(
+        `Staking parameters updated successfully! Transaction ID: ${tx}`
+      );
+      await fetchStakingData(); // Refresh staking data
+    } catch (err) {
+      console.error("Error updating staking parameters:", err);
+      setError(`Update failed: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCreateCoupon = async (e) => {
+    e.preventDefault();
+    if (!wallet.publicKey || !isAdminWallet(wallet.publicKey)) return;
+
+    setLoading(true);
+    setError("");
+    setSuccess("");
+
+    try {
+      const program = getStakingProgram(connection, wallet);
+      const [stakingAccount] = await PublicKey.findProgramAddress(
+        [Buffer.from("staking_account")],
+        program.programId
+      );
+
+      // Convert form values
+      const bonusType = { [couponForm.bonusType.toLowerCase()]: {} };
+      const bonusValue = Number.parseFloat(couponForm.bonusValue);
+      const duration = new anchor.BN(Number.parseInt(couponForm.duration));
+      const minStakeAmount = new anchor.BN(
+        Number.parseFloat(couponForm.minStakeAmount) *
+          anchor.web3.LAMPORTS_PER_SOL
+      );
+      const maxUses = new anchor.BN(Number.parseInt(couponForm.maxUses));
+      const couponCategory = { [couponForm.couponCategory]: {} };
+
+      // Call the createCoupon instruction
+      const tx = await program.methods
+        .createCoupon(
+          couponForm.code,
+          bonusType,
+          bonusValue,
+          duration,
+          minStakeAmount,
+          maxUses,
+          couponCategory
+        )
+        .accounts({
+          stakingAccount,
+          admin: wallet.publicKey,
+          systemProgram: anchor.web3.SystemProgram.programId,
+        })
+        .rpc();
+
+      setSuccess(`Coupon created successfully! Transaction ID: ${tx}`);
+
+      // Reset form
+      setCreateCouponForm({
+        code: "",
+        bonusType: "Percentage",
+        bonusValue: "",
+        duration: "",
+        minStakeAmount: "",
+        maxUses: "",
+        couponCategory: "NewUser",
+      });
+
+      await fetchStakingData(); // Refresh staking data
+    } catch (err) {
+      console.error("Error creating coupon:", err);
+      setError(`Coupon creation failed: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUpdateFormChange = (e) => {
+    const { name, value } = e.target;
+    setUpdateForm((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+  };
+
+  const handleCouponFormChange = (e) => {
+    const { name, value } = e.target;
+    setCreateCouponForm((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+  };
+
+  const handleSelectChange = (name, value) => {
+    setCreateCouponForm((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+  };
+
+  if (!wallet.publicKey || !isAdminWallet(wallet.publicKey)) {
+    return (
+      <AdminLayout>
+        <Card>
+          <CardHeader>
+            <CardTitle>Staking Administration</CardTitle>
+            <CardDescription>
+              You do not have permission to access this page.
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      </AdminLayout>
+    );
+  }
+
+  return (
+    <AdminLayout>
+      <Card>
+        <CardHeader>
+          <CardTitle>Staking Administration</CardTitle>
+          <CardDescription>
+            Manage staking parameters and coupons
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {loading && !stakingData ? (
+            <div className="flex justify-center items-center py-8">
+              <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+            </div>
+          ) : (
+            <Tabs
+              defaultValue="update"
+              value={activeTab}
+              onValueChange={setActiveTab}
+              className="w-full"
+            >
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="update">Update Parameters</TabsTrigger>
+                <TabsTrigger value="coupons">Create Coupon</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="update">
+                <form
+                  onSubmit={handleUpdateStakingParams}
+                  className="space-y-4 pt-4"
+                >
+                  <div className="space-y-2">
+                    <Label htmlFor="lockupPeriod">
+                      Lockup Period (seconds):
+                    </Label>
+                    <Input
+                      type="number"
+                      id="lockupPeriod"
+                      name="lockupPeriod"
+                      value={updateForm.lockupPeriod}
+                      onChange={handleUpdateFormChange}
+                      required
+                      min="0"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="lowTierFee">Low Tier Fee (%):</Label>
+                    <Input
+                      type="number"
+                      id="lowTierFee"
+                      name="lowTierFee"
+                      value={updateForm.lowTierFee}
+                      onChange={handleUpdateFormChange}
+                      required
+                      min="0"
+                      step="0.01"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="midTierFee">Mid Tier Fee (%):</Label>
+                    <Input
+                      type="number"
+                      id="midTierFee"
+                      name="midTierFee"
+                      value={updateForm.midTierFee}
+                      onChange={handleUpdateFormChange}
+                      required
+                      min="0"
+                      step="0.01"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="highTierFee">High Tier Fee (%):</Label>
+                    <Input
+                      type="number"
+                      id="highTierFee"
+                      name="highTierFee"
+                      value={updateForm.highTierFee}
+                      onChange={handleUpdateFormChange}
+                      required
+                      min="0"
+                      step="0.01"
+                    />
+                  </div>
+                  <Button type="submit" disabled={loading} className="w-full">
+                    {loading ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Updating...
+                      </>
+                    ) : (
+                      "Update Parameters"
+                    )}
+                  </Button>
+                </form>
+              </TabsContent>
+
+              <TabsContent value="coupons">
+                <form onSubmit={handleCreateCoupon} className="space-y-4 pt-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="code">Coupon Code:</Label>
+                    <Input
+                      type="text"
+                      id="code"
+                      name="code"
+                      value={couponForm.code}
+                      onChange={handleCouponFormChange}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="bonusType">Bonus Type:</Label>
+                    <Select
+                      value={couponForm.bonusType}
+                      onValueChange={(value) =>
+                        handleSelectChange("bonusType", value)
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select bonus type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Percentage">Percentage</SelectItem>
+                        <SelectItem value="FixedAmount">
+                          Fixed Amount
+                        </SelectItem>
+                        <SelectItem value="SpinBonus">Spin Bonus</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="bonusValue">Bonus Value:</Label>
+                    <Input
+                      type="number"
+                      id="bonusValue"
+                      name="bonusValue"
+                      value={couponForm.bonusValue}
+                      onChange={handleCouponFormChange}
+                      required
+                      min="0"
+                      step="0.01"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="duration">Duration (seconds):</Label>
+                    <Input
+                      type="number"
+                      id="duration"
+                      name="duration"
+                      value={couponForm.duration}
+                      onChange={handleCouponFormChange}
+                      required
+                      min="0"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="minStakeAmount">
+                      Minimum Stake Amount (SOL):
+                    </Label>
+                    <Input
+                      type="number"
+                      id="minStakeAmount"
+                      name="minStakeAmount"
+                      value={couponForm.minStakeAmount}
+                      onChange={handleCouponFormChange}
+                      required
+                      min="0"
+                      step="0.000000001"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="maxUses">Maximum Uses:</Label>
+                    <Input
+                      type="number"
+                      id="maxUses"
+                      name="maxUses"
+                      value={couponForm.maxUses}
+                      onChange={handleCouponFormChange}
+                      required
+                      min="1"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="couponCategory">Coupon Category:</Label>
+                    <Select
+                      value={couponForm.couponCategory}
+                      onValueChange={(value) =>
+                        handleSelectChange("couponCategory", value)
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select category" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="NewUser">New User</SelectItem>
+                        <SelectItem value="Referral">Referral</SelectItem>
+                        <SelectItem value="LoyaltyReward">
+                          Loyalty Reward
+                        </SelectItem>
+                        <SelectItem value="SeasonalPromo">
+                          Seasonal Promo
+                        </SelectItem>
+                        <SelectItem value="Exclusive">Exclusive</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Button type="submit" disabled={loading} className="w-full">
+                    {loading ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Creating...
+                      </>
+                    ) : (
+                      "Create Coupon"
+                    )}
+                  </Button>
+                </form>
+              </TabsContent>
+            </Tabs>
+          )}
+
+          {error && (
+            <Alert variant="destructive" className="mt-4">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+          {success && (
+            <Alert className="mt-4 bg-green-50 text-green-800 border-green-500">
+              <AlertDescription>{success}</AlertDescription>
+            </Alert>
+          )}
+        </CardContent>
+      </Card>
+    </AdminLayout>
+  );
+};
+
+export default StakingAdmin;
+
+
+
+
+
+
+
+
+
+
+
 src/pages/TokenBalance.js
 
 
@@ -4218,23 +5188,29 @@ src/utils/anchor-connection.js
 
 
 
-import * as anchor from '@project-serum/anchor';
-import { Connection, PublicKey } from '@solana/web3.js';
-import idl from './idl/ico_program.json';
+
+
+import * as anchor from "@project-serum/anchor"
+import { Connection, PublicKey } from "@solana/web3.js"
+import icoIdl from "./idl/ico_program.json"
+import stakingIdl from "./idl/staking_program.json"
 
 export const getProgram = (connection, wallet) => {
-  const provider = new anchor.AnchorProvider(
-    connection,
-    wallet,
-    { preflightCommitment: 'processed' }
-  );
-  const programId = new PublicKey(process.env.REACT_APP_PROGRAM_ID);
-  return new anchor.Program(idl, programId, provider);
-};
+  const provider = new anchor.AnchorProvider(connection, wallet, { preflightCommitment: "processed" })
+  const programId = new PublicKey(process.env.REACT_APP_ICO_PROGRAM_ID)
+  return new anchor.Program(icoIdl, programId, provider)
+}
+
+export const getStakingProgram = (connection, wallet) => {
+  const provider = new anchor.AnchorProvider(connection, wallet, { preflightCommitment: "processed" })
+  const programId = new PublicKey(process.env.REACT_APP_STAKING_PROGRAM_ID)
+  return new anchor.Program(stakingIdl, programId, provider)
+}
 
 export const getConnection = () => {
-  return new Connection(process.env.REACT_APP_RPC_ENDPOINT, 'processed');
-};
+  return new Connection(process.env.REACT_APP_RPC_ENDPOINT, "processed")
+}
+
 
 
 
@@ -4439,50 +5415,43 @@ src/App.js
 
 
 
-import React, { useMemo } from 'react';
-import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
-import { ConnectionProvider, WalletProvider } from '@solana/wallet-adapter-react';
-import { WalletAdapterNetwork } from '@solana/wallet-adapter-base';
-import {
-  PhantomWalletAdapter,
-  SolflareWalletAdapter,
-  TorusWalletAdapter,
-} from '@solana/wallet-adapter-wallets';
-import { WalletModalProvider } from '@solana/wallet-adapter-react-ui';
-import { clusterApiUrl } from '@solana/web3.js';
+"use client"
 
-import Layout from './components/Layout';
-import { AdminRoute } from './components/AdminRoute';
+import { useMemo } from "react"
+import { BrowserRouter as Router, Route, Routes } from "react-router-dom"
+import { ConnectionProvider, WalletProvider } from "@solana/wallet-adapter-react"
+import { WalletAdapterNetwork } from "@solana/wallet-adapter-base"
+import { PhantomWalletAdapter, SolflareWalletAdapter, TorusWalletAdapter } from "@solana/wallet-adapter-wallets"
+import { WalletModalProvider } from "@solana/wallet-adapter-react-ui"
+import { clusterApiUrl } from "@solana/web3.js"
+
+import Layout from "./components/Layout"
+import { AdminRoute } from "./components/AdminRoute"
 
 // Pages
-import Dashboard from './pages/Dashboard';
-import IcoDetails from './pages/IcoDetails';
-import BuyTokens from './pages/BuyTokens';
-import TokenBalance from './pages/TokenBalance';
-import InitializeIco from './pages/InitializeIco';
-import ManageInvestors from './pages/ManageInvestors';
-import UpdateRound from './pages/UpdateRound';
-import UpdateParameters from './pages/UpdateIcoParameters';
-import DistributeTokens from './pages/DistributeTokens';
-import EndIco from './pages/EndIco';
-import IcoAnalytics from './pages/IcoAnalytics';
+import Dashboard from "./pages/Dashboard"
+import IcoDetails from "./pages/IcoDetails"
+import BuyTokens from "./pages/BuyTokens"
+import TokenBalance from "./pages/TokenBalance"
+import InitializeIco from "./pages/InitializeIco"
+import ManageInvestors from "./pages/ManageInvestors"
+import UpdateRound from "./pages/UpdateRound"
+import UpdateParameters from "./pages/UpdateIcoParameters"
+import DistributeTokens from "./pages/DistributeTokens"
+import EndIco from "./pages/EndIco"
+import IcoAnalytics from "./pages/IcoAnalytics"
+import Staking from "./pages/Staking"
+import StakingAdmin from "./pages/StakingAdmin"
 
-import '@solana/wallet-adapter-react-ui/styles.css';
-import './index.css';
+import "@solana/wallet-adapter-react-ui/styles.css"
+import "./index.css"
 
 function App() {
   // Use devnet for development
-  const network = WalletAdapterNetwork.Devnet;
-  const endpoint = useMemo(() => clusterApiUrl(network), [network]);
+  const network = WalletAdapterNetwork.Devnet
+  const endpoint = useMemo(() => clusterApiUrl(network), [network])
 
-  const wallets = useMemo(
-    () => [
-      new PhantomWalletAdapter(),
-      new SolflareWalletAdapter(),
-      new TorusWalletAdapter(),
-    ],
-    []
-  );
+  const wallets = useMemo(() => [new PhantomWalletAdapter(), new SolflareWalletAdapter(), new TorusWalletAdapter()], [])
 
   return (
     <ConnectionProvider endpoint={endpoint}>
@@ -4496,16 +5465,74 @@ function App() {
                 <Route path="/ico-details" element={<IcoDetails />} />
                 <Route path="/buy" element={<BuyTokens />} />
                 <Route path="/balance" element={<TokenBalance />} />
-                
+                <Route path="/staking" element={<Staking />} />
+
                 {/* Admin Routes */}
                 <Route path="/admin">
-                  <Route path="initialize-ico" element={<AdminRoute><InitializeIco /></AdminRoute>} />
-                  <Route path="manage-investors" element={<AdminRoute><ManageInvestors /></AdminRoute>} />
-                  <Route path="update-round" element={<AdminRoute><UpdateRound /></AdminRoute>} />
-                  <Route path="update-parameters" element={<AdminRoute><UpdateParameters /></AdminRoute>} />
-                  <Route path="distribute-tokens" element={<AdminRoute><DistributeTokens /></AdminRoute>} />
-                  <Route path="analytics" element={<AdminRoute><IcoAnalytics /></AdminRoute>} />
-                  <Route path="end-ico" element={<AdminRoute><EndIco /></AdminRoute>} />
+                  <Route
+                    path="initialize-ico"
+                    element={
+                      <AdminRoute>
+                        <InitializeIco />
+                      </AdminRoute>
+                    }
+                  />
+                  <Route
+                    path="manage-investors"
+                    element={
+                      <AdminRoute>
+                        <ManageInvestors />
+                      </AdminRoute>
+                    }
+                  />
+                  <Route
+                    path="update-round"
+                    element={
+                      <AdminRoute>
+                        <UpdateRound />
+                      </AdminRoute>
+                    }
+                  />
+                  <Route
+                    path="update-parameters"
+                    element={
+                      <AdminRoute>
+                        <UpdateParameters />
+                      </AdminRoute>
+                    }
+                  />
+                  <Route
+                    path="distribute-tokens"
+                    element={
+                      <AdminRoute>
+                        <DistributeTokens />
+                      </AdminRoute>
+                    }
+                  />
+                  <Route
+                    path="analytics"
+                    element={
+                      <AdminRoute>
+                        <IcoAnalytics />
+                      </AdminRoute>
+                    }
+                  />
+                  <Route
+                    path="end-ico"
+                    element={
+                      <AdminRoute>
+                        <EndIco />
+                      </AdminRoute>
+                    }
+                  />
+                  <Route
+                    path="staking"
+                    element={
+                      <AdminRoute>
+                        <StakingAdmin />
+                      </AdminRoute>
+                    }
+                  />
                 </Route>
               </Routes>
             </Layout>
@@ -4513,10 +5540,12 @@ function App() {
         </WalletModalProvider>
       </WalletProvider>
     </ConnectionProvider>
-  );
+  )
 }
 
-export default App;
+export default App
+
+
 
 
 
@@ -4553,7 +5582,8 @@ ReactDOM.render(
 .env 
 
 
-REACT_APP_PROGRAM_ID=FyCz92Au4vcsanwaJZ8PrykVf6oPgreoYKmCque5Qq45
+REACT_APP_ICO_PROGRAM_ID=FyCz92Au4vcsanwaJZ8PrykVf6oPgreoYKmCque5Qq45
+REACT_APP_STAKING_PROGRAM_ID=BU1moyj3dVEVhi2GwyDLqG9gt2fD47XToqSRNNuc7U1b
 REACT_APP_ADMIN_WALLET_ADDRESS=DYkCAokwibanNxMvixmoZFQDwayGDJWfJ9moZjDRpUvW
 REACT_APP_TOKEN_MINT_ADDRESS=7GYz5XMx5BQrMtexJZrrJQM1WfhHnWAmf8Snhaqqmf3U
 REACT_APP_OWNER_ADDRESS=DYkCAokwibanNxMvixmoZFQDwayGDJWfJ9moZjDRpUvW
@@ -4598,4 +5628,7 @@ So this are my all major files and I also provide smart contract also, now read 
 and regenerate the full files and tell me the smart contract changes process also if needed (like what is buyer field should be in buytoken, IcoAccount, authority, treasureWallet, tokenAccount, buyerTokenAccount,tokenProgram and systemProgram in the input field)
 
 
-Here Ico contarct is working, now You need to create the staking page and integrate with the existing code file with route and all and regenerate the file where staking contract should be integarted with reactjs integrate file
+Here Ico contarct is not working, From UI(Admin oprtion) i can`t initialize the ICO, its is showing "Assertion failed" error, First fix this issue after fully reading the project
+
+and in staking portion also not working, means after initialize in beta.solpg(online ide) still not showing any staking value and others error still facing, Fix the issue fully all and then regenerate the particular file after modification particular part
+
