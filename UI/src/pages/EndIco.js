@@ -1,11 +1,17 @@
-import React, { useState, useEffect } from 'react';
-import { useConnection, useWallet } from '@solana/wallet-adapter-react';
-import { PublicKey } from '@solana/web3.js';
-import { getProgram } from '../utils/anchor-connection';
-import { formatSol } from '../utils/formatters';
-import { isAdminWallet } from '../utils/admin-check';
-import AdminLayout from '../components/AdminLayout';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
+import React, { useState, useEffect } from "react";
+import { useConnection, useWallet } from "@solana/wallet-adapter-react";
+import { PublicKey } from "@solana/web3.js";
+import { getProgram } from "../utils/anchor-connection";
+import { formatSol } from "../utils/formatters";
+import { isAdminWallet } from "../utils/admin-check";
+import AdminLayout from "../components/AdminLayout";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "../components/ui/card";
 import { Button } from "../components/ui/button";
 
 const EndIco = () => {
@@ -14,8 +20,8 @@ const EndIco = () => {
   const [icoData, setIcoData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [ending, setEnding] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
 
   useEffect(() => {
     if (wallet.publicKey && isAdminWallet(wallet.publicKey)) {
@@ -27,19 +33,19 @@ const EndIco = () => {
     if (!wallet.publicKey) return;
 
     setLoading(true);
-    setError('');
+    setError("");
 
     try {
       const program = getProgram(connection, wallet);
       const [icoAccount] = await PublicKey.findProgramAddress(
-        [Buffer.from('ico')],
+        [Buffer.from("ico")],
         program.programId
       );
       const data = await program.account.icoAccount.fetch(icoAccount);
       setIcoData(data);
     } catch (err) {
-      console.error('Error fetching ICO data:', err);
-      setError('Failed to fetch ICO data. Please try again later.');
+      console.error("Error fetching ICO data:", err);
+      setError("Failed to fetch ICO data. Please try again later.");
     } finally {
       setLoading(false);
     }
@@ -49,13 +55,13 @@ const EndIco = () => {
     if (!wallet.publicKey || !wallet.signTransaction) return;
 
     setEnding(true);
-    setError('');
-    setSuccess('');
+    setError("");
+    setSuccess("");
 
     try {
       const program = getProgram(connection, wallet);
       const [icoAccount] = await PublicKey.findProgramAddress(
-        [Buffer.from('ico')],
+        [Buffer.from("ico")],
         program.programId
       );
 
@@ -70,8 +76,8 @@ const EndIco = () => {
       setSuccess(`ICO ended successfully! Transaction ID: ${tx}`);
       await fetchIcoData();
     } catch (err) {
-      console.error('Error ending ICO:', err);
-      setError('Failed to end ICO. Please try again later.');
+      console.error("Error ending ICO:", err);
+      setError("Failed to end ICO. Please try again later.");
     } finally {
       setEnding(false);
     }
@@ -83,7 +89,9 @@ const EndIco = () => {
         <Card>
           <CardHeader>
             <CardTitle>End ICO</CardTitle>
-            <CardDescription>You do not have permission to access this page.</CardDescription>
+            <CardDescription>
+              You do not have permission to access this page.
+            </CardDescription>
           </CardHeader>
         </Card>
       </AdminLayout>
@@ -107,24 +115,40 @@ const EndIco = () => {
             <>
               <div className="space-y-4 mb-6">
                 <div>
-                  <p className="text-sm font-medium text-gray-500">Total Supply:</p>
-                  <p className="text-lg font-semibold">{formatSol(icoData.totalSupply)} SOL</p>
+                  <p className="text-sm font-medium text-gray-500">
+                    Total Supply:
+                  </p>
+                  <p className="text-lg font-semibold">
+                    {icoData ? formatSol(icoData.totalSupply) : "N/A"} SOL
+                  </p>
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-gray-500">Tokens Sold:</p>
-                  <p className="text-lg font-semibold">{formatSol(icoData.tokensSold)} SOL</p>
+                  <p className="text-sm font-medium text-gray-500">
+                    Tokens Sold:
+                  </p>
+                  <p className="text-lg font-semibold">
+                    {icoData ? formatSol(icoData.tokensSold) : "N/A"} SOL
+                  </p>
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-gray-500">Current Status:</p>
-                  <p className="text-lg font-semibold">{icoData.isActive ? 'Active' : 'Inactive'}</p>
+                  <p className="text-sm font-medium text-gray-500">
+                    Current Status:
+                  </p>
+                  <p className="text-lg font-semibold">
+                    {icoData
+                      ? icoData.isActive
+                        ? "Active"
+                        : "Inactive"
+                      : "N/A"}
+                  </p>
                 </div>
               </div>
               <Button
                 onClick={handleEndIco}
-                disabled={ending || !icoData.isActive}
+                disabled={ending || (icoData && !icoData.isActive)}
                 className="w-full"
               >
-                {ending ? 'Ending ICO...' : 'End ICO'}
+                {ending ? "Ending ICO..." : "End ICO"}
               </Button>
               {error && (
                 <div className="mt-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded-md text-sm">
@@ -145,4 +169,3 @@ const EndIco = () => {
 };
 
 export default EndIco;
-

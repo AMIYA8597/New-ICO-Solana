@@ -16,7 +16,7 @@ const IcoDetails = () => {
     if (wallet.publicKey) {
       fetchIcoDetails();
     }
-  }, [connection, wallet.publicKey]);
+  }, [connection, wallet.publicKey]); // Removed icoData to prevent infinite loop
 
   const fetchIcoDetails = async () => {
     if (!wallet.publicKey) return;
@@ -26,11 +26,19 @@ const IcoDetails = () => {
 
     try {
       const program = getProgram(connection, wallet);
+      
+      // Find the ICO account PDA
       const [icoAccount] = await PublicKey.findProgramAddress(
         [Buffer.from('ico')],
         program.programId
       );
+      
+      console.log("ICO Account address:", icoAccount.toString());
+      
+      // Fetch the account data using the correct account type
       const data = await program.account.icoAccount.fetch(icoAccount);
+      
+      console.log("ICO Data fetched:", data);
       setIcoData(data);
     } catch (err) {
       console.error('Error fetching ICO details:', err);
@@ -71,8 +79,9 @@ const IcoDetails = () => {
     );
   }
 
-  // const progress = (icoData.tokensSold.toNumber() / icoData.totalSupply.toNumber()) * 100;
-  const progress = (parseFloat(icoData.tokensSold.toString()) / parseFloat(icoData.totalSupply.toString())) * 100;
+  // Calculate progress safely
+  const progress = icoData ? 
+    (parseFloat(icoData.tokensSold.toString()) / parseFloat(icoData.totalSupply.toString())) * 100 : 0;
 
   return (
     <Card className="max-w-4xl mx-auto">
@@ -84,11 +93,11 @@ const IcoDetails = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <h3 className="text-lg font-semibold mb-2">Total Supply</h3>
-            <p className="text-3xl font-bold">{formatSol(icoData.totalSupply.toString())} SOL</p>
+            <p className="text-3xl font-bold">{formatSol(icoData.totalSupply)} SOL</p>
           </div>
           <div>
             <h3 className="text-lg font-semibold mb-2">Tokens Sold</h3>
-            <p className="text-3xl font-bold">{formatSol(icoData.tokensSold.toString())} SOL</p>
+            <p className="text-3xl font-bold">{formatSol(icoData.tokensSold)} SOL</p>
           </div>
         </div>
         <div>
@@ -101,7 +110,7 @@ const IcoDetails = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <h3 className="text-lg font-semibold mb-2">Current Price</h3>
-            <p className="text-2xl font-bold">{formatSol(icoData.currentPublicPrice.toString())} SOL</p>
+            <p className="text-2xl font-bold">{formatSol(icoData.currentPublicPrice)} SOL</p>
           </div>
           <div>
             <h3 className="text-lg font-semibold mb-2">Round Type</h3>
@@ -115,7 +124,9 @@ const IcoDetails = () => {
           </div>
           <div>
             <h3 className="text-lg font-semibold mb-2">End Time</h3>
-            <p className="text-xl">{formatUnixTimestamp(icoData.startTime.toString() + icoData.duration.toString())}</p>
+            <p className="text-xl">{formatUnixTimestamp(
+              parseInt(icoData.startTime.toString()) + parseInt(icoData.duration.toString())
+            )}</p>
           </div>
         </div>
         <div>
@@ -130,4 +141,3 @@ const IcoDetails = () => {
 };
 
 export default IcoDetails;
-

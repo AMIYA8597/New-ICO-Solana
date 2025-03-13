@@ -60,6 +60,10 @@ export const getConnection = () => {
 
 
 
+
+
+
+
 // import * as anchor from '@project-serum/anchor';
 // import { Connection, PublicKey } from '@solana/web3.js';
 // import idl from './idl/ico_program.json';
